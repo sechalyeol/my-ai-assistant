@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-11-17 21:46:40
+﻿// Last Updated: 2025-11-17 21:48:33
 const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');

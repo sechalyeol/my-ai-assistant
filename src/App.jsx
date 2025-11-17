@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-11-17 21:46:40
+﻿// Last Updated: 2025-11-17 21:48:33
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 🧠 AI 두뇌 임포트
 import SunCalc from 'suncalc'; 

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-11-17 21:46:40
+﻿// Last Updated: 2025-11-17 21:48:33
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class', // 👈 [중요] 이 줄이 있어야 버튼으로 테마를 바꿀 수 있습니다!
