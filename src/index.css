@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 👇 [핵심] html과 body 배경을 강제로 투명하게 설정 */
+html, body {
+  background: transparent !important;
+  background-color: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 스크롤바 꼬임 방지 */
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+  background: transparent !important; /* 리액트 루트도 투명하게 */
+}
+
+/* 드래그 설정 */
+.drag-region { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* 스크롤바 숨김 */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
