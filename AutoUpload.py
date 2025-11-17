@@ -96,13 +96,13 @@ def main():
     # 먼저 모든 파일을 Staging 합니다.
     if run_command(["git", "add", "."], cwd=PROJECT_PATH) is None: 
         return
-        
+
     # 'static/models' 폴더의 변경 사항만 Staging 목록에서 제외(Unstage)합니다.
-    # '--'는 경로와 옵션을 구분합니다.
-    if run_command(["git", "reset", "static/models"], cwd=PROJECT_PATH) is None: 
-        # git reset이 실패하면 (예: 해당 파일이 변경되지 않아 reset할 내용이 없을 때) 
-        # 오류로 간주하지 않고 다음 단계로 진행합니다.
-        pass 
+    print("Executing: git reset static/models")
+    # 👇 [수정] git reset이 실패하면 경고만 출력하고 계속 진행합니다.
+    # 이미 git reset을 실행했으므로, 이 부분을 run_command 대신 직접 subprocess로 감싸 에러를 무시합니다.
+    subprocess.run(["git", "reset", "static/models"], cwd=PROJECT_PATH, shell=True, capture_output=True, text=True, encoding='utf-8')
+    # 기존 run_command 호출을 제거하고 위 코드로 대체합니다.
         
     print(f"\n--- 2. Committing with message: '{commit_message}' ---")
     commit_result = run_command(["git", "commit", "-m", commit_message], cwd=PROJECT_PATH)
