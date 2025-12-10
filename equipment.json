@@ -1,0 +1,95 @@
+{
+  "list": [
+    {
+      "id": 1765131962525,
+      "title": "TEST",
+      "desc": "TEST",
+      "chapters": [
+        {
+          "id": 1765330147400,
+          "title": "TEST",
+          "docId": null,
+          "isDone": false
+        }
+      ],
+      "documents": [
+        {
+          "id": 1765330159471,
+          "title": "TEST",
+          "type": "PID",
+          "path": "C:\\Users\\user\\Desktop\\화면 캡처 2025-12-06 052333.png"
+        },
+        {
+          "id": 1765330195691,
+          "title": "TEST",
+          "type": "PID",
+          "path": "C:\\Users\\user\\Desktop\\화면 캡처 2025-12-06 033326.png"
+        }
+      ],
+      "meta": {
+        "code": "TEST",
+        "maker": "제조사 미정",
+        "installDate": "2025-12-07",
+        "location": "현장"
+      },
+      "logs": [
+        {
+          "id": 1765330170709,
+          "date": "2025-12-10",
+          "content": "TEST",
+          "type": "USER"
+        }
+      ]
+    },
+    {
+      "id": 1765329020588,
+      "title": "TEST2",
+      "desc": "TEST2",
+      "chapters": [],
+      "documents": [],
+      "logs": [],
+      "meta": {
+        "code": "TEST2",
+        "maker": "제조사 미정",
+        "installDate": "2025-12-10",
+        "location": "현장"
+      }
+    },
+    {
+      "id": 1765330140199,
+      "title": "TEST",
+      "desc": "TEST",
+      "chapters": [],
+      "documents": [],
+      "logs": [],
+      "meta": {
+        "code": "TEST",
+        "maker": "제조사 미정",
+        "installDate": "2025-12-10",
+        "location": "현장"
+      }
+    }
+  ],
+  "fieldGuides": [
+    {
+      "id": 1765337870794,
+      "type": "TROUBLE",
+      "title": "TEST",
+      "desc": "",
+      "steps": [],
+      "tags": [
+        "신규"
+      ]
+    },
+    {
+      "id": 1765337921167,
+      "type": "OPERATION",
+      "title": "TEST",
+      "desc": "",
+      "steps": [],
+      "tags": [
+        "신규"
+      ]
+    }
+  ]
+}

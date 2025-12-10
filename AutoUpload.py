@@ -2,26 +2,29 @@
 import datetime
 import os
 import re
+import platform # OS 확인용
 
-# --- 설정 (이 부분을 자신의 환경에 맞게 수정하세요) ---
-PROJECT_PATH = "C:/Users/user/my-ai-assistant"  # Git 프로젝트 폴더 경로
-REPO_URL = "https://github.com/sechalyeol/my-ai-assistant.git" # 본인의 GitHub 저장소 주소
+# --- 설정 ---
+PROJECT_PATH = "C:/Users/user/my-ai-assistant"
+REPO_URL = "https://github.com/sechalyeol/my-ai-assistant.git"
 
-# 👇👇 [필수 추가] 제외 목록 및 주석 템플릿 👇👇
-EXCLUDE_DIRS = ['node_modules', '.git', 'dist', 'public/models', 'static/models'] 
-EXCLUDE_FILES = ['AutoUpload.py', 'package-lock.json', 'yarn.lock'] # 자기 자신과 락 파일 제외
+# 제외할 디렉토리 (OS에 맞게 자동 변환됨)
+EXCLUDE_DIRS = ['node_modules', '.git', 'dist', 'public/models', 'static/models']
+# 제외할 파일
+EXCLUDE_FILES = ['AutoUpload.py', 'package-lock.json', 'yarn.lock']
 
-# 파일 확장자별 주석 템플릿 ({}에 현재 시간이 들어갑니다)
+# 파일 확장자별 주석 템플릿
 COMMENT_MAP = {
     '.js': '// Last Updated: {}',
     '.jsx': '// Last Updated: {}',
     '.cjs': '// Last Updated: {}',
     '.py': '# Last Updated: {}',
-    # 필요한 다른 파일 형식 (CSS, HTML 등)을 추가할 수 있습니다.
+    '.css': '/* Last Updated: {} */', # CSS 추가
 }
 
 def run_command(command, cwd):
     print(f"Executing: {' '.join(command)}")
+    # Windows에서 한글 깨짐 방지를 위해 encoding 설정
     result = subprocess.run(command, cwd=cwd, shell=True, capture_output=True, text=True, encoding='utf-8')
     if result.returncode != 0:
         print(f"Error: {result.stderr}")
@@ -33,22 +36,27 @@ def run_command(command, cwd):
 def update_file_timestamps(project_path, now_str):
     print("\n--- Updating file timestamps ---")
     
-    # ⚠️ 수정된 부분: EXCLUDE_DIRS에 전체 경로 또는 서브 디렉토리 이름을 모두 고려하여 제외합니다.
-    # 예: 'static/models'가 EXCLUDE_DIRS에 있다면, 'static' 내에서 'models'를 건너뜁니다.
+    # 1. 윈도우 호환성을 위해 제외 경로들을 OS 표준 경로로 변환
+    normalized_excludes = [os.path.normpath(p) for p in EXCLUDE_DIRS]
+
     for root, dirs, files in os.walk(project_path):
-        # 현재 디렉토리가 project_path/static이라고 가정할 때, 
-        # dirs에는 ['models']가 있습니다.
+        # 2. 디렉토리 제외 로직 (윈도우 경로 호환 수정)
+        # 현재 탐색 중인 폴더의 상대 경로 계산
+        rel_root = os.path.relpath(root, project_path)
         
-        # 제외 목록에 있는 디렉토리들을 dirs 리스트에서 제거합니다.
-        # os.path.relpath를 사용하여 root를 기준으로 상대 경로를 만듭니다.
-        dirs_to_exclude_in_root = [
-            d for d in dirs 
-            if d in EXCLUDE_DIRS or os.path.join(os.path.relpath(root, project_path), d) in EXCLUDE_DIRS
-        ]
-        
-        # dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS] # 기존 코드
-        dirs[:] = [d for d in dirs if d not in dirs_to_exclude_in_root] # ⚠️ 수정된 코드
-        
+        # dirs 리스트를 수정하여 walk가 제외된 폴더로 들어가지 않게 함
+        # 리스트를 복사하여 순회하면서 원본을 수정
+        for d in list(dirs):
+            # 현재 폴더 이름이 제외 목록에 있거나
+            if d in normalized_excludes:
+                dirs.remove(d)
+                continue
+            
+            # 전체 상대 경로(예: public\models)가 제외 목록에 있는지 확인
+            full_rel_path = os.path.normpath(os.path.join(rel_root, d))
+            if full_rel_path in normalized_excludes:
+                dirs.remove(d)
+
         for file in files:
             if file in EXCLUDE_FILES:
                 continue
@@ -58,73 +66,77 @@ def update_file_timestamps(project_path, now_str):
 
             if file_ext in COMMENT_MAP:
                 comment_template = COMMENT_MAP.get(file_ext)
-                # 템플릿이 비어있지 않은 경우에만 주석 추가 로직 실행
                 if comment_template:
                     update_comment = comment_template.format(now_str)
                     
                     parts = comment_template.split('{}')
                     pattern_start = re.escape(parts[0])
                     pattern_end = re.escape(parts[1]) if len(parts) > 1 else ''
+                    # 기존 주석을 찾기 위한 정규식
                     regex_pattern = re.compile(rf'^{pattern_start}.*{pattern_end}\s*$')
 
                     try:
+                        # utf-8-sig는 윈도우 메모장 등과의 호환성을 위함
                         with open(file_path, 'r+', encoding='utf-8-sig') as f:
                             lines = f.readlines()
-                            if lines and regex_pattern.match(lines[0]):
+                            if not lines: continue # 빈 파일 건너뜀
+
+                            if regex_pattern.match(lines[0]):
                                 lines[0] = update_comment + '\n'
-                                print(f"Updated timestamp in: {file_path}")
+                                # print(f"Updated: {file}") # 너무 많으면 주석 처리
                             else:
                                 lines.insert(0, update_comment + '\n')
-                                print(f"Added timestamp to: {file_path}")
+                                print(f"Stamped: {file}")
                             
                             f.seek(0)
                             f.writelines(lines)
                             f.truncate()
                     except Exception as e:
-                        print(f"Could not process file {file_path}: {e}")
+                        print(f"Skipped {file}: {e}")
 
 def main():
+    # 0. Git 초기화 확인 (없으면 init 및 remote 추가)
+    if not os.path.exists(os.path.join(PROJECT_PATH, ".git")):
+        print("Initializing Git repository...")
+        run_command(["git", "init"], cwd=PROJECT_PATH)
+        run_command(["git", "remote", "add", "origin", REPO_URL], cwd=PROJECT_PATH)
+
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     commit_message = f"Auto-commit: {now}"
     
-    # 1. 파일 타임스탬프 업데이트 (EXCLUDE_DIRS, EXCLUDE_FILES 적용됨)
+    # 1. 파일 타임스탬프 업데이트
     update_file_timestamps(PROJECT_PATH, now)
     
-    # 2. Staging all changes (static/models 제외)
-    print("\n--- 1. Staging all changes (excluding static/models) ---")
-    
-    # 먼저 모든 파일을 Staging 합니다.
+    # 2. Staging
+    print("\n--- 1. Staging changes ---")
     if run_command(["git", "add", "."], cwd=PROJECT_PATH) is None: 
         return
 
-    # 'static/models' 폴더의 변경 사항만 Staging 목록에서 제외(Unstage)합니다.
-    print("Executing: git reset static/models")
-    # 👇 [수정] git reset이 실패하면 경고만 출력하고 계속 진행합니다.
-    # 이미 git reset을 실행했으므로, 이 부분을 run_command 대신 직접 subprocess로 감싸 에러를 무시합니다.
-    subprocess.run(["git", "reset", "static/models"], cwd=PROJECT_PATH, shell=True, capture_output=True, text=True, encoding='utf-8')
-    # 기존 run_command 호출을 제거하고 위 코드로 대체합니다.
+    # 제외하고 싶은 폴더가 있다면 reset 수행 (윈도우 호환 경로)
+    # 여기서는 예시로 static/models를 놔두지만, 필요하면 활성화
+    # subprocess.run(["git", "reset", os.path.normpath("static/models")], cwd=PROJECT_PATH, shell=True)
         
-    print(f"\n--- 2. Committing with message: '{commit_message}' ---")
-    commit_result = run_command(["git", "commit", "-m", commit_message], cwd=PROJECT_PATH)
+    print(f"\n--- 2. Committing ---")
+    # 커밋할 게 있는지 확인 후 커밋
+    status_output = run_command(["git", "status", "--porcelain"], cwd=PROJECT_PATH)
     
-    if commit_result is None:
-        status_output = run_command(["git", "status", "--porcelain"], cwd=PROJECT_PATH)
-        if status_output: # Staged 되지 않은 파일이 남아있을 경우 (static/models)
-             print("\n⚠️ Commit failed. Checking staged status.")
-             # git status --porcelain 결과에 staged된 파일이 없음을 확인
-             staged_files = [line for line in status_output.splitlines() if line.startswith('M') or line.startswith('A')]
-             if not staged_files:
-                 print("No files were staged for commit.")
-             else:
-                 return # staged 파일이 있는데 commit이 실패하면 오류로 간주
-        else: # 변경 사항이 없어서 commit이 안 되는 경우
-            print("No changes to commit (after excluding static/models).")
-            # Unstaged 된 static/models 파일들은 그대로 남아있게 됩니다.
-            
+    if status_output and status_output.strip():
+        commit_result = run_command(["git", "commit", "-m", commit_message], cwd=PROJECT_PATH)
+        if commit_result is None:
+            print("Commit failed.")
+            return
+    else:
+        print("Nothing to commit.")
+
     print("\n--- 3. Pushing to GitHub ---")
-    push_command = ["git", "push", "-u", "origin", "master:main", "--force"]
-    if run_command(push_command, cwd=PROJECT_PATH) is None: return
-    print("\n✅ Successfully updated timestamps and uploaded to GitHub!")
+    # HEAD:main -> 현재 브랜치(무엇이든)를 원격의 main으로 푸시
+    push_command = ["git", "push", "-u", "origin", "HEAD:main", "--force"]
+    
+    if run_command(push_command, cwd=PROJECT_PATH) is None: 
+        print("❌ Push failed. Check your internet or repo permissions.")
+        return
+        
+    print("\n✅ All Done! Uploaded to GitHub.")
 
 if __name__ == "__main__":
     main()

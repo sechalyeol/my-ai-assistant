@@ -1,0 +1,74 @@
+{
+  "selectedGroup": "운영 1그룹",
+  "dashboardLayout": [
+    {
+      "w": 1,
+      "h": 3,
+      "x": 1,
+      "y": 0,
+      "i": "mental",
+      "minW": 1,
+      "minH": 3,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 1,
+      "h": 3,
+      "x": 0,
+      "y": 0,
+      "i": "tasks",
+      "minW": 1,
+      "minH": 3,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 1,
+      "h": 2,
+      "x": 0,
+      "y": 6,
+      "i": "finance",
+      "minW": 1,
+      "minH": 2,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 1,
+      "h": 3,
+      "x": 1,
+      "y": 6,
+      "i": "development",
+      "minW": 1,
+      "minH": 3,
+      "moved": false,
+      "static": false
+    },
+    {
+      "w": 2,
+      "h": 3,
+      "x": 0,
+      "y": 3,
+      "i": "work",
+      "minW": 2,
+      "minH": 3,
+      "moved": false,
+      "static": false
+    }
+  ],
+  "dashboardWidgetOrder": [
+    "mental",
+    "development",
+    "tasks",
+    "finance",
+    "work"
+  ],
+  "visibleModules": {
+    "schedule": true,
+    "finance": true,
+    "mental": true,
+    "development": true,
+    "work": true
+  }
+}

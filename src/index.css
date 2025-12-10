@@ -1,10 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+﻿/* Last Updated: 2025-12-10 15:03:34 */
+/* [index.css] - 프리텐다드(Pretendard) 폰트 적용 */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 👇 [핵심] html과 body 배경을 강제로 투명하게 설정 */
+/* 기본 폰트 설정 */
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+/* 👇 html과 body 배경을 강제로 투명하게 설정 (Electron 투명창 지원) */
 html, body {
   background: transparent !important;
   background-color: transparent !important;
@@ -23,6 +30,30 @@ html, body {
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
-/* 스크롤바 숨김 */
+/* 🟢 [수정] 스크롤바 커스텀 (모든 스크롤바에 적용) */
+/* scrollbar-hide 클래스가 없을 때만 이 스타일이 적용됩니다 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d8; /* zinc-300 */
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa; /* zinc-400 */
+}
+/* 다크모드 대응 */
+.dark ::-webkit-scrollbar-thumb {
+  background: #3f3f46; /* zinc-700 */
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #52525b; /* zinc-600 */
+}
+
+/* 스크롤바 숨김 유틸리티 */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
