@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
+﻿// Last Updated: 2025-12-10 15:38:38
 // [Part 1] 파일 상단: 임포트, 헬퍼 함수, State 초기화
 import React, { useState, useRef } from 'react';
 import {

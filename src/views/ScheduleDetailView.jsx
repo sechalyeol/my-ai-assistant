@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
+﻿// Last Updated: 2025-12-10 15:38:38
 import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, X, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import TodoModal from '../components/modals/TodoModal'; // 1단계에서 만든 모달 import
@@ -11,6 +11,7 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedTodo, setSelectedTodo] = useState(null);
     const [expandedDate, setExpandedDate] = useState(null);
+    const [dialogConfig, setDialogConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
     const [draggedTodoId, setDraggedTodoId] = useState(null);
     const [resizingTodo, setResizingTodo] = useState(null);
@@ -96,18 +97,25 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
         setSelectedTodo(null);
     };
 
+    // 🟢 [수정] 삭제 확인 다이얼로그 띄우기
     const handleDeleteTodo = (id) => {
         if (typeof id === 'string' && id.startsWith('auto-shift')) {
             alert("자동 생성된 근무 일정은 삭제할 수 없습니다.");
             return;
         }
-        setTodos(prev => {
-            const newTodos = prev.filter(t => t.id !== id);
-            ipcRenderer.send('save-schedules', newTodos);
-            return newTodos;
+        setDialogConfig({
+            isOpen: true,
+            message: "정말 이 일정을 삭제하시겠습니까?",
+            onConfirm: () => {
+                setTodos(prev => {
+                    const newTodos = prev.filter(t => t.id !== id);
+                    ipcRenderer.send('save-schedules', newTodos);
+                    return newTodos;
+                });
+                setSelectedTodo(null);
+                if (expandedDate) setExpandedDate(null);
+            }
         });
-        setSelectedTodo(null);
-        if (expandedDate) setExpandedDate(null);
     };
 
     // --- DnD & Resizing 핸들러 ---

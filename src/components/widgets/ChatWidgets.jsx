@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
+﻿// Last Updated: 2025-12-10 15:38:38
 import React from 'react';
 import { Calendar as CalendarIcon, Wallet, Heart, BookOpen } from 'lucide-react';
 

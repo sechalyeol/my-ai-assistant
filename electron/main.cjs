@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
+﻿// Last Updated: 2025-12-10 15:38:38
 // [main.cjs] - 괄호 위치 수정 및 최대화 기능 포함 최종본
 
 const cheerio = require('cheerio');

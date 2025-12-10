@@ -1,5 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
-// src/App.jsx (최종본 - 생략 없음)
+﻿// Last Updated: 2025-12-10 15:38:38
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -134,7 +133,7 @@ function App() {
 
     const callGeminiAI = async (userText) => {
         try {
-            // 1. 최신 데이터 로드 (Source of Truth)
+            // 🟢 1. 최신 데이터 로드 (Source of Truth)
             const realSchedules = await ipcRenderer.invoke('load-schedules') || [];
             const realMental = await ipcRenderer.invoke('load-mental') || { logs: [] };
             const realDev = await ipcRenderer.invoke('load-development') || { tasks: [] };
@@ -146,7 +145,7 @@ function App() {
             const todayShift = getShiftForDate(now);
             const currentDateInfo = `Current Date: ${todayStr} (${days[now.getDay()]}), Time: ${now.getHours()}:${now.getMinutes()}`;
 
-            // --- [Context 1] 일정 컨텍스트 ---
+            // 🟢 [Context 1] 일정 컨텍스트
             const todoListContext = realSchedules.length > 0
                 ? realSchedules.map(t => {
                     const d = new Date(t.date);
@@ -167,7 +166,7 @@ function App() {
                 .join('\n');
             const futureContext = upcomingScheduleText ? `[Upcoming 7 Days]\n${upcomingScheduleText}` : "No upcoming schedules.";
 
-            // --- [Context 2] 멘탈 히스토리 ---
+            // 🟢 [Context 2] 멘탈 히스토리
             const twoWeeksAgo = new Date(now);
             twoWeeksAgo.setDate(now.getDate() - 14);
             const recentLogs = realMental.logs
@@ -177,7 +176,7 @@ function App() {
                 ? recentLogs.map(l => `${l.date} | Mood: ${l.mood} | Score: ${l.score} | Note: "${l.summary}"`).join('\n')
                 : "No recent records.";
 
-            // --- [Context 3] 서재 및 설비 ---
+            // 🟢 [Context 3] 서재 및 설비
             const generateCurriculumContext = (tasks) => {
                 let context = "";
                 tasks.forEach(book => {
@@ -188,37 +187,104 @@ function App() {
             const libraryContext = generateCurriculumContext(realDev.tasks || []);
             const equipContext = realEquip.list.map(e => `[Equip: ${e.title}] (${e.meta.code})`).join('\n') || "등록된 설비 없음";
 
+            // 🟢 [System Instruction] 프롬프트 조립
             const systemInstruction = `
             You are 'AI Partner Pro'.
-            
-            [Context]
-            - Time: ${currentDateInfo}
-            - **Today's Shift**: ${todayShift}
-            - **Schedules**: ${todoListContext}
-            - **Future Schedules**: ${futureContext}
-            - **Mental History**: ${mentalHistoryText}
-            - **Library**: ${libraryContext}
-            - **Equipments**: ${equipContext}
 
-            [Rules]
-            1. **Unconditional Execution**: If user wants to add/modify/delete data, generate JSON action immediately. Do NOT ask for confirmation.
-            2. **Mental Care**: Analyze mood input deeply. Use history & shift context for advice.
-            3. **Facility**: If user mentions equipment repair/check, use "add_equipment_log". Match equipment name fuzzily.
+        [🚨 CRITICAL RULES - READ THIS FIRST]
+        1. **SOURCE OF TRUTH**: The [Existing Schedules] list below is the **ONLY** truth.
+        2. **IGNORE MEMORY**: Do NOT rely on previous conversation history.
+        3. **UNCONDITIONAL EXECUTION**: 
+           - When the user asks to add a schedule (e.g., "Add PT"), **DO NOT** check for duplicates yourself.
+           - **ALWAYS** generate the 'add_todo' JSON action immediately.
+        4. **ALWAYS JSON**: Output JSON command only.
 
-            [JSON Schema]
-            { "action": "analyze_mental", "summary": "string", "mood": "string", "score": number, "advice": "string", "daily_advice": "string", "tags": ["string"] }
-            { "action": "add_todo", "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string", "category": "string" }
-            { "action": "modify_todo", "id": number, "date": "...", "startTime": "...", "endTime": "...", "content": "..." }
-            { "action": "delete_todo", "id": number }
-            { "action": "search_books", "results": [] }
-            { "action": "generate_curriculum", "title": "string", ... }
-            { "action": "record_study", "topic": "string", "note": "string", "mark_done": boolean }
-            { "action": "delete_book", "id": "string" }
-            { "action": "start_quiz", "topic": "string" }
-            { "action": "add_equipment_log", "equipId": number|null, "content": "string", "date": "YYYY-MM-DD" }
-            { "action": "chat", "message": "string" }
-            
-            Return JSON Array ONLY.
+        [Context]
+        - Current Time: ${currentDateInfo}
+        - **Today's Shift**: ${todayShift}
+        - **Existing Schedules (All)**: 
+        ${todoListContext}
+        
+        - **Upcoming Schedules (Strategy Context)**:
+        ${futureContext}
+        
+        - **Mental History (Last 2 Weeks)**:
+        ${mentalHistoryText}
+        
+        - **User's Library**:
+        ${libraryContext}
+
+        [Task 1: Schedule Management] (Priority: High)
+        - Use JSON actions (add_todo, etc.) for schedule commands.
+        - "주간/대근" -> 07:30~19:30, "야간/대근" -> 19:30~07:30.
+        - **Category Rules**:
+          - "health": PT, 헬스, 운동, 병원
+          - "work": 회의, 업무, 출장
+          - "shift": 근무, 대근
+          - "finance": 은행, 주식
+          - "development": 공부, 독서
+          - "personal": 약속, 여행
+
+        [Task 2: Mental Care & Comprehensive Analysis] (Priority: High)
+        - **Trigger**: When user inputs a mood/diary (e.g., "오늘 힘들었어", "기분 좋아", "일기: ...").
+        - **Action**: "analyze_mental"
+        
+        - **Logic for 'advice' (Specific Feedback)**:
+           - Analyze the *current* sentiment/score (0-19:Worst, 90-100:Perfect).
+           - Give warm empathy or praise for *this specific input*.
+           
+        - **Logic for 'daily_advice' (Strategic Insight)**:
+           - **Look at the Trend**: Is the score dropping over 2 weeks? (Burnout warning). Rising? (Keep it up).
+           - **Look at the Schedule**: 
+             - Big event coming up? -> Advice on preparation/mindset.
+             - Empty schedule? -> Suggest rest/hobby.
+           - **Look at the Shift**: 
+             - Use shift context wisely (e.g., Night shift + Exam = Sleep strategy).
+           - **Output**: One strategic, helpful sentence in Korean.
+
+        [Task 3: Self-Development & Library]
+        - **Check Library**: If user asks "What books?", read [User's Library].
+        - **Study Tracking**: "I studied [Topic]" -> **ACTION: "record_study"** (mark_done: true).
+        - **Note Taking**: "Note that [Content]" -> **ACTION: "record_study"** (note: Content).
+        - **Quiz Request**: "Quiz on [Topic]" -> **ACTION: "start_quiz"** (topic: Topic).
+
+        [Task 4: Dashboard Widgets]
+        - Trigger: "Check schedule", "Show finance", "Mental status", "Study progress" -> Use "show_X" actions.
+
+        [Task 5: Facility Management] (Priority: High)
+        - **Trigger**: User mentions equipment maintenance, repair, or operation (e.g., "1호기 밸브 교체했어", "가스터빈 점검 완료").
+        - **Action**: "add_equipment_log"
+        - **Logic**: 
+          1. Identify the equipment from [Equipment List] using fuzzy matching (e.g., "1호기" -> "가스터빈 1호기").
+          2. If equipment is found, use its ID. If not sure, set equipId to null.
+          3. Extract the content of the maintenance/operation.
+
+        [JSON Schema]
+        { 
+          "action": "analyze_mental", 
+          "summary": "string", 
+          "mood": "string", 
+          "score": number, 
+          "advice": "Feedback for THIS input", 
+          "daily_advice": "Strategic advice based on history & schedule", 
+          "tags": ["string"] 
+        }
+        { "action": "add_todo", "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string", "category": "string" }
+        { "action": "modify_todo", "id": number, "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string" }
+        { "action": "delete_todo", "id": number }
+        { "action": "search_books", "results": [] }
+        { "action": "generate_curriculum", "title": "string", ... } 
+        { "action": "record_study", "topic": "string", "note": "string", "mark_done": boolean }
+        { "action": "delete_book", "id": "string" }
+        { "action": "show_schedule" }
+        { "action": "show_finance" }
+        { "action": "show_mental" }
+        { "action": "show_development" }
+        { "action": "chat", "message": "string" }
+        { "action": "start_quiz", "topic": "string" }
+        { "action": "add_equipment_log", "equipId": number|null, "content": "string", "date": "YYYY-MM-DD" }
+        
+        IMPORTANT: If multiple actions needed, return a JSON ARRAY.
             `;
 
             const model = genAI.getGenerativeModel({

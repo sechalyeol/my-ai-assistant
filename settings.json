@@ -59,9 +59,9 @@
   ],
   "dashboardWidgetOrder": [
     "mental",
-    "development",
     "tasks",
     "finance",
+    "development",
     "work"
   ],
   "visibleModules": {

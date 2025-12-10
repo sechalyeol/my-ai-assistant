@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:03:34
+﻿// Last Updated: 2025-12-10 15:38:38
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Send, Sparkles, BookOpen, Trash2, Heart, Bot } from 'lucide-react';
@@ -8,6 +8,7 @@ const { ipcRenderer } = window.require('electron');
 const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
     const [diaryInput, setDiaryInput] = useState('');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [dialogConfig, setDialogConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
     const handleDiarySubmit = async () => {
         if (!diaryInput.trim()) return;
@@ -18,32 +19,38 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
     };
 
     const handleDeleteLog = (id) => {
-        setMental(prev => {
-            const newLogs = prev.logs.filter(log => log.id !== id);
-            const todayStr = new Date().toISOString().split('T')[0];
-            const todayLogs = newLogs.filter(log => log.date === todayStr);
+        setDialogConfig({
+            isOpen: true,
+            message: "이 기록을 정말 삭제하시겠습니까?",
+            onConfirm: () => {
+                setMental(prev => {
+                    const newLogs = prev.logs.filter(log => log.id !== id);
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const todayLogs = newLogs.filter(log => log.date === todayStr);
 
-            let newScore = 0;
-            if (todayLogs.length > 0) {
-                const total = todayLogs.reduce((acc, cur) => acc + cur.score, 0);
-                newScore = Math.round(total / todayLogs.length);
-            } else {
-                newScore = 0;
+                    let newScore = 0;
+                    if (todayLogs.length > 0) {
+                        const total = todayLogs.reduce((acc, cur) => acc + cur.score, 0);
+                        newScore = Math.round(total / todayLogs.length);
+                    } else {
+                        newScore = 0;
+                    }
+
+                    const latestLog = newLogs.length > 0 ? newLogs[0] : null;
+                    const newMood = latestLog ? latestLog.mood : '기록 없음';
+
+                    const newMentalData = {
+                        ...prev,
+                        logs: newLogs,
+                        currentMood: newMood,
+                        score: newScore,
+                        todayAdvice: todayLogs.length > 0 ? prev.todayAdvice : ""
+                    };
+
+                    ipcRenderer.send('save-mental', newMentalData);
+                    return newMentalData;
+                });
             }
-
-            const latestLog = newLogs.length > 0 ? newLogs[0] : null;
-            const newMood = latestLog ? latestLog.mood : '기록 없음';
-
-            const newMentalData = {
-                ...prev,
-                logs: newLogs,
-                currentMood: newMood,
-                score: newScore,
-                todayAdvice: todayLogs.length > 0 ? prev.todayAdvice : ""
-            };
-
-            ipcRenderer.send('save-mental', newMentalData);
-            return newMentalData;
         });
     };
 
@@ -109,12 +116,27 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
                                     </div>
                                     <div className="mb-3 pl-1 border-l-2 border-zinc-200 dark:border-zinc-700"><p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed italic pl-2">"{log.summary}"</p></div>
                                     <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/30 relative"><Bot size={14} className="absolute top-3 left-3 text-indigo-500" /><p className="text-xs text-zinc-700 dark:text-zinc-300 pl-6 leading-relaxed font-medium">{log.advice}</p></div>
-                                </div>
+</div>
                             );
                         })
                     )}
                 </div>
             </div>
+
+            {/* 🟢 [추가] 삭제 확인 다이얼로그 렌더링 */}
+            {dialogConfig.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4" onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })}>
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-xs rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col items-center text-center animate-scale-up" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={24} /></div>
+                        <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-2">확인 필요</h3>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed whitespace-pre-wrap">{dialogConfig.message}</p>
+                        <div className="flex gap-2 w-full">
+                            <button onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">취소</button>
+                            <button onClick={() => { if (dialogConfig.onConfirm) dialogConfig.onConfirm(); setDialogConfig({ ...dialogConfig, isOpen: false }); }} className="flex-1 py-2.5 rounded-xl text-white font-bold text-sm shadow-lg transition-colors bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">삭제</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
