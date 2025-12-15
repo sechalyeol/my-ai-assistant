@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:38:38
+﻿// Last Updated: 2025-12-15 22:45:33
 import React, { useState } from 'react';
 import {
     Sparkles, Heart, Cloud, CloudRain, Wallet, BookOpen, Calendar as CalendarIcon,
@@ -50,7 +50,7 @@ const ModernCard = ({ title, icon: Icon, children, className = "", accentColor =
     );
 };
 
-// 🟢 [내부 컴포넌트 3] ManualAccessWidget
+// 🟢 [수정됨] ManualAccessWidget
 const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
     const manuals = work.manuals || [];
     const categories = work.categories || [];
@@ -61,9 +61,9 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
     ];
 
     const handleSectionClick = (sectionId) => {
-        setDashboardSubView('work');
+        setDashboardSubView('work'); // 상위 탭 전환
         if (sectionId === 'COMMON') setWorkViewMode('BASIC_LIST');
-        else if (sectionId === 'FACILITY') setWorkViewMode('EQUIP_LIST');
+        else if (sectionId === 'FACILITY') setWorkViewMode('EQUIP_LIST'); // 설비 마스터 연결
         else if (sectionId === 'PROCESS') setWorkViewMode('OPER_LIST');
         else setWorkViewMode('HOME');
     };
@@ -75,14 +75,21 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
                 {sections.map((section, idx) => {
                     const targetCategoryIds = categories.filter(c => c.group === section.id).map(c => c.id);
                     const count = manuals.filter(m => targetCategoryIds.includes(m.category)).length;
-                    const hasData = count > 0;
+                    
+                    // 🟢 [핵심 수정] 설비 마스터(FACILITY)는 데이터 개수와 상관없이 항상 활성화(hasData = true)
+                    // COMMON은 원래 데이터가 있으면 활성화, PROCESS는 데이터가 있어야 활성화
+                    const isAlwaysActive = section.id === 'FACILITY' || (section.id === 'COMMON' && count > 0);
+                    const hasData = isAlwaysActive || count > 0;
+                    
                     const Icon = section.icon;
                     const colorMap = { amber: 'bg-amber-50/40 text-amber-700 border-amber-200/50 group-hover:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20', emerald: 'bg-emerald-50/40 text-emerald-700 border-emerald-200/50 group-hover:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20', indigo: 'bg-indigo-50/40 text-indigo-700 border-indigo-200/50 group-hover:border-indigo-400/50 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20' };
                     const activeStyle = colorMap[section.color];
+
                     return (
                         <div key={idx} onClick={() => hasData && handleSectionClick(section.id)} className={`group relative w-full flex-1 px-3 rounded-xl border flex items-center justify-between transition-all duration-300 ${hasData ? `cursor-pointer hover:-translate-y-0.5 hover:shadow-sm ${activeStyle}` : "bg-zinc-50/30 border-zinc-100/50 text-zinc-400 border-dashed dark:bg-white/5 dark:border-zinc-800 dark:text-zinc-600 opacity-60 cursor-not-allowed"}`}>
                             <div className="flex items-center gap-3"><div className={`p-1.5 rounded-lg ${hasData ? 'bg-white/60 dark:bg-white/10 shadow-sm' : 'bg-zinc-100/50 dark:bg-zinc-800'}`}><Icon size={16} /></div><div className="flex flex-col justify-center"><span className="text-[9px] font-bold opacity-70 uppercase tracking-wider leading-none mb-0.5">{section.engLabel}</span><span className="font-bold text-xs">{section.label}</span></div></div>
-                            <div>{hasData ? (<div className="flex items-center gap-1"><span className="text-xs font-bold bg-white/40 dark:bg-white/10 px-1.5 py-0.5 rounded text-current">{count}</span></div>) : (<Lock size={12} className="opacity-40" />)}</div>
+                            {/* 설비 마스터일 때는 'GO' 표시, 나머지는 개수 또는 잠금 아이콘 */}
+                            <div>{hasData ? (<div className="flex items-center gap-1"><span className="text-xs font-bold bg-white/40 dark:bg-white/10 px-1.5 py-0.5 rounded text-current">{section.id === 'FACILITY' ? 'GO' : count}</span></div>) : (<Lock size={12} className="opacity-40" />)}</div>
                         </div>
                     );
                 })}

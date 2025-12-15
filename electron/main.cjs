@@ -1,9 +1,9 @@
-﻿// Last Updated: 2025-12-10 15:38:38
-// [main.cjs] - 괄호 위치 수정 및 최대화 기능 포함 최종본
+﻿// Last Updated: 2025-12-15 22:45:33
+// [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
 const fs = require('fs');
-const path = require('path'); // 🟢 이 줄이 없어서 에러가 났던 것입니다! (복구 완료)
+const path = require('path');
 const { createRequire } = require('module');
 
 // 표준 방식: 빌드 도구 간섭을 피하기 위해 createRequire만 사용
@@ -12,9 +12,12 @@ const pdfParse = nativeRequire('pdf-parse');
 
 require('dotenv').config();
 
-const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron'); // 🟢 shell, dialog 추가
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron');
 
 console.log("네이버 키 확인:", process.env.NAVER_CLIENT_ID);
+
+// 🟢 [추가] 캐시 에러 방지를 위한 하드웨어 가속 비활성화 (선택 사항)
+// app.disableHardwareAcceleration(); 
 
 let mainWindow;
 let dashboardWindow = null;
@@ -31,7 +34,8 @@ const DATA_PATHS = {
   development: path.join(PROJECT_ROOT, 'development.json'),
   work: path.join(PROJECT_ROOT, 'work.json'),
   settings: path.join(PROJECT_ROOT, 'settings.json'),
-  equipment: path.join(PROJECT_ROOT, 'equipment.json') // 🟢 [신규] 콤마(,) 주의 후 이 줄 추가
+  equipment: path.join(PROJECT_ROOT, 'equipment.json'),
+  user: path.join(PROJECT_ROOT, 'user-profile.json')
 };
 
 // 통합된 데이터 업데이트 알림 함수
@@ -45,13 +49,21 @@ function broadcastUpdate(dataType) {
     }
 }
 
-// 통합된 saveData 함수
+// 🟢 [수정됨] 통합된 saveData 함수 (안전장치 추가)
 function saveData(filePath, data, dataType = null) {
   try {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-    const count = Array.isArray(data) ? data.length : 'Object';
-    console.log(`✅ [저장 완료] 경로: ${filePath}`);
-    console.log(`   └─ 데이터 크기: ${count}개 항목`);
+    
+    // 로그 출력 시 data가 null이거나 undefined일 경우를 대비해 안전하게 체크
+    let countLog = 'Empty';
+    if (Array.isArray(data)) {
+        countLog = `${data.length} items`;
+    } else if (data && typeof data === 'object') {
+        countLog = data.items ? `${data.items.length} items` : 'Object';
+    }
+
+    console.log(`✅ [저장 완료] 경로: ${filePath} (${countLog})`);
+    
     if (dataType) {
         broadcastUpdate(dataType);
     }
@@ -94,6 +106,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      webSecurity: false // 로컬 이미지 로드 허용
     },
   });
 
@@ -131,12 +144,12 @@ function createDashboardWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
+            webSecurity: false 
         },
     });
 
     dashboardWindow.loadURL(`http://localhost:5173/?view=dashboard&theme=${currentThemeMode}`);
 
-    // 🟢 창 최대화/복원 상태 감지 및 전송
     dashboardWindow.on('maximize', () => {
         dashboardWindow.webContents.send('window-maximized-state', true);
     });
@@ -203,7 +216,6 @@ ipcMain.on('set-background-color', (event, color) => {
 // 데이터 로드/저장 핸들러
 ipcMain.handle('load-schedules', () => loadData(DATA_PATHS.schedules, []));
 ipcMain.on('save-schedules', (event, data) => {
-    console.log(`📥 [요청 수신] save-schedules: ${data.length}개 항목 수신됨`);
     saveData(DATA_PATHS.schedules, data, 'schedules');
 });
 
@@ -222,29 +234,85 @@ ipcMain.on('save-development', (event, data) => {
     saveData(DATA_PATHS.development, data, 'development');
 });
 
+ipcMain.handle('load-work', () => loadData(DATA_PATHS.work, { manuals: [] }));
+ipcMain.on('save-work', (event, data) => {
+    saveData(DATA_PATHS.work, data, 'work');
+});
+
+ipcMain.handle('load-equipment', () => loadData(DATA_PATHS.equipment, { list: [] }));
+ipcMain.on('save-equipment', (event, data) => {
+    saveData(DATA_PATHS.equipment, data, 'equipment');
+});
+
+// 🟢 [수정됨] 사용자 프로필 로드 (기본값을 null 대신 빈 객체 {}로 설정하여 에러 방지)
+ipcMain.handle('load-user-profile', () => loadData(DATA_PATHS.user, {}));
+ipcMain.on('save-user-profile', (event, data) => {
+    saveData(DATA_PATHS.user, data, 'user');
+});
+
+// 선택적 데이터 백업
+ipcMain.on('export-selective-data', async (event, dataToExport) => {
+    try {
+        const { filePath } = await dialog.showSaveDialog({
+            title: '데이터 백업 (선택 항목)',
+            defaultPath: path.join(app.getPath('downloads'), 'my-ai-data-backup.json'),
+            filters: [{ name: 'JSON Files', extensions: ['json'] }]
+        });
+
+        if (filePath) {
+            fs.writeFileSync(filePath, JSON.stringify(dataToExport, null, 2));
+            console.log("백업 완료:", filePath);
+        }
+    } catch (error) {
+        console.error('데이터 내보내기 실패:', error);
+    }
+});
+
+// 데이터 초기화
+ipcMain.on('reset-all-data', () => {
+    try {
+        Object.values(DATA_PATHS).forEach(filePath => {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        });
+        console.log("모든 데이터가 초기화되었습니다.");
+        app.relaunch();
+        app.exit();
+    } catch (error) {
+        console.error("데이터 초기화 실패:", error);
+    }
+});
+
+// 이미지 선택 핸들러
+ipcMain.handle('select-image', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'jpeg', 'webp'] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0]; 
+});
+
 ipcMain.on('minimize-window', () => mainWindow.minimize());
 ipcMain.on('hide-window', () => mainWindow.hide());
-
 ipcMain.on('dashboard-minimize', () => dashboardWindow && dashboardWindow.minimize());
-
-// 대시보드 최대화/복원 토글 핸들러
 ipcMain.on('dashboard-maximize', () => {
     if (dashboardWindow) {
         if (dashboardWindow.isMaximized()) {
             dashboardWindow.unmaximize();
-            // 💡 OS 이벤트를 기다리지 않고 즉시 상태 전송 (False: 복원됨)
             dashboardWindow.webContents.send('window-maximized-state', false);
         } else {
             dashboardWindow.maximize();
-            // 💡 OS 이벤트를 기다리지 않고 즉시 상태 전송 (True: 최대화됨)
             dashboardWindow.webContents.send('window-maximized-state', true);
         }
     }
 });
+ipcMain.on('dashboard-close', () => dashboardWindow && dashboardWindow.close());
 
-// ⚙️ 설정(Settings) 로드/저장 핸들러
+// 설정 로드/저장
 ipcMain.handle('load-settings', () => loadData(DATA_PATHS.settings, {
-    shiftBaseDate: "2025-03-05", // 기본값
+    shiftBaseDate: "2025-03-05",
     shiftPattern: [
         "주간 근무","주간 근무","휴무","휴무","휴무",
         "야간 근무","야간 근무","휴무","휴무",
@@ -254,29 +322,24 @@ ipcMain.handle('load-settings', () => loadData(DATA_PATHS.settings, {
         "야간 근무","야간 근무","야간 근무","휴무","휴무",
     ]
 }));
-
 ipcMain.on('save-settings', (event, data) => {
     saveData(DATA_PATHS.settings, data, 'settings');
 });
 
-// 📚 네이버 도서 검색 API 핸들러
+// 네이버 도서 검색 API
 const https = require('https');
-
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
 
 ipcMain.handle('search-naver-books', async (event, query) => {
     return new Promise((resolve, reject) => {
-        // 정확도순(sim) 정렬, 10개 검색
         const api_url = `https://openapi.naver.com/v1/search/book.json?query=${encodeURI(query)}&display=10&sort=sim`;
-        
         const options = {
             headers: {
                 'X-Naver-Client-Id': NAVER_CLIENT_ID,
                 'X-Naver-Client-Secret': NAVER_CLIENT_SECRET
             }
         };
-
         const req = https.get(api_url, options, (res) => {
             let data = '';
             res.on('data', (chunk) => { data += chunk; });
@@ -284,96 +347,52 @@ ipcMain.handle('search-naver-books', async (event, query) => {
                 try {
                     if (res.statusCode === 200) {
                         const parsed = JSON.parse(data);
-                        resolve(parsed.items || []); // 검색 결과 배열 반환
+                        resolve(parsed.items || []); 
                     } else {
-                        console.error("Naver API Error Status:", res.statusCode);
-                        resolve([]); // 에러 시 빈 배열 반환
+                        resolve([]); 
                     }
                 } catch (e) {
-                    console.error("JSON Parse Error:", e);
                     resolve([]);
                 }
             });
         });
-
-        req.on('error', (e) => {
-            console.error("Network Error:", e);
-            resolve([]);
-        });
+        req.on('error', (e) => resolve([]));
     });
 });
 
-ipcMain.on('dashboard-close', () => dashboardWindow && dashboardWindow.close());
-
-// 🟢 [신규] PDF 파일 선택 창 열기
+// PDF 파일 처리
 ipcMain.handle('select-pdf', async () => {
     const result = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0]; // 선택된 파일 경로 반환
+    return result.filePaths[0]; 
 });
 
-// 🟢 [신규] 파일 열기 (기본 연결 프로그램)
 ipcMain.on('open-local-file', (event, filePath) => {
     if (filePath) shell.openPath(filePath);
 });
 
 ipcMain.handle('extract-pdf-text', async (event, filePath) => {
     try {
-        console.log(`📄 PDF 추출 시작: ${filePath}`);
-        
-        // 1. 파일 읽기
         const dataBuffer = fs.readFileSync(filePath);
-        
-        // 2. 표준 라이브러리 사용 (이제 함수로 정상 동작함)
         const data = await pdfParse(dataBuffer);
-        
-        console.log(`✅ PDF 추출 성공 (길이: ${data.text.length}자)`);
         return data.text; 
-
     } catch (error) {
-        console.error("❌ PDF Parsing Error:", error);
-        return ""; // 에러 나면 빈 문자열 반환
+        return ""; 
     }
 });
 
-ipcMain.handle('load-work', () => loadData(DATA_PATHS.work, { manuals: [] })); // tasks 대신 manuals 사용
-ipcMain.on('save-work', (event, data) => {
-    saveData(DATA_PATHS.work, data, 'work');
-});
-
-ipcMain.handle('select-image', async () => {
-    const result = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'jpeg'] }]
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0]; // 선택된 이미지 경로 반환
-});
-
-// 🟢 [신규] 모든 파일 선택 핸들러 (이게 없으면 이미지 선택창이 뜹니다)
+// 모든 파일 선택
 ipcMain.handle('select-any-file', async () => {
     const result = await dialog.showOpenDialog({
         properties: ['openFile'],
-        filters: [
-            { name: 'All Files', extensions: ['*'] } // ⭐ 모든 파일 허용
-        ]
+        filters: [{ name: 'All Files', extensions: ['*'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    
-    // 파일 경로와 파일명을 함께 반환
     return { 
         filePath: result.filePaths[0], 
         fileName: path.basename(result.filePaths[0]) 
     };
-});
-
-// 🟢 [신규] 설비 데이터 로드 (load-equipment)
-ipcMain.handle('load-equipment', () => loadData(DATA_PATHS.equipment, { list: [] }));
-
-// 🟢 [신규] 설비 데이터 저장 (save-equipment)
-ipcMain.on('save-equipment', (event, data) => {
-    saveData(DATA_PATHS.equipment, data, 'equipment');
 });

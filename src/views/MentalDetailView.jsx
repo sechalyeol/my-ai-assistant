@@ -1,14 +1,17 @@
-﻿// Last Updated: 2025-12-10 15:38:38
+﻿// Last Updated: 2025-12-15 22:45:33
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
-import { Send, Sparkles, BookOpen, Trash2, Heart, Bot } from 'lucide-react';
+import { Sparkles, Send, Trash2, BookOpen, Heart, Bot, AlertTriangle } from 'lucide-react';
 
 const { ipcRenderer } = window.require('electron');
 
 const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
     const [diaryInput, setDiaryInput] = useState('');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [dialogConfig, setDialogConfig] = useState({ isOpen: false, message: '', onConfirm: null });
+    
+    // 🟢 [추가] 삭제 모달 관련 State
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState(null);
 
     const handleDiarySubmit = async () => {
         if (!diaryInput.trim()) return;
@@ -18,40 +21,44 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
         setIsAnalyzing(false);
     };
 
-    const handleDeleteLog = (id) => {
-        setDialogConfig({
-            isOpen: true,
-            message: "이 기록을 정말 삭제하시겠습니까?",
-            onConfirm: () => {
-                setMental(prev => {
-                    const newLogs = prev.logs.filter(log => log.id !== id);
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const todayLogs = newLogs.filter(log => log.date === todayStr);
+    // 🟢 [수정] 삭제 요청 (모달 띄우기)
+    const requestDeleteLog = (id) => {
+        setDeleteTargetId(id);
+        setShowDeleteModal(true);
+    };
 
-                    let newScore = 0;
-                    if (todayLogs.length > 0) {
-                        const total = todayLogs.reduce((acc, cur) => acc + cur.score, 0);
-                        newScore = Math.round(total / todayLogs.length);
-                    } else {
-                        newScore = 0;
-                    }
+    // 🟢 [수정] 실제 삭제 실행
+    const confirmDeleteLog = () => {
+        if (!deleteTargetId) return;
 
-                    const latestLog = newLogs.length > 0 ? newLogs[0] : null;
-                    const newMood = latestLog ? latestLog.mood : '기록 없음';
+        setMental(prev => {
+            const newLogs = prev.logs.filter(log => log.id !== deleteTargetId);
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayLogs = newLogs.filter(log => log.date === todayStr);
 
-                    const newMentalData = {
-                        ...prev,
-                        logs: newLogs,
-                        currentMood: newMood,
-                        score: newScore,
-                        todayAdvice: todayLogs.length > 0 ? prev.todayAdvice : ""
-                    };
-
-                    ipcRenderer.send('save-mental', newMentalData);
-                    return newMentalData;
-                });
+            let newScore = 0;
+            if (todayLogs.length > 0) {
+                const total = todayLogs.reduce((acc, cur) => acc + cur.score, 0);
+                newScore = Math.round(total / todayLogs.length);
             }
+
+            const latestLog = newLogs.length > 0 ? newLogs[0] : null;
+            const newMood = latestLog ? latestLog.mood : '기록 없음';
+
+            const newMentalData = {
+                ...prev,
+                logs: newLogs,
+                currentMood: newMood,
+                score: newScore,
+                todayAdvice: todayLogs.length > 0 ? prev.todayAdvice : ""
+            };
+
+            ipcRenderer.send('save-mental', newMentalData);
+            return newMentalData;
         });
+
+        setShowDeleteModal(false);
+        setDeleteTargetId(null);
     };
 
     const lineChartData = [...mental.logs].reverse().map(log => ({ date: log.date.slice(5), score: log.score }));
@@ -74,7 +81,7 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
     };
 
     return (
-        <div className="h-full flex flex-col gap-4 animate-fade-in p-2 overflow-hidden">
+        <div className="h-full flex flex-col gap-4 animate-fade-in p-2 overflow-hidden relative">
             <div className="grid grid-cols-3 gap-4 flex-shrink-0 h-[300px]">
                 <div className="col-span-2 bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm flex flex-col">
                     <div className="flex justify-between items-center mb-4"><div className="flex items-baseline gap-2"><span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Mental Analytics</span><span className={`text-2xl font-black ${getScoreColor(mental.score)}`}>{mental.score}</span></div><div className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">Last 7 Days</div></div>
@@ -97,16 +104,14 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
                     ) : (
                         mental.logs.map((log) => {
                             const displayTime = log.time || new Date(log.id).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
-
                             return (
                                 <div key={log.id} className="bg-white dark:bg-zinc-900/30 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors group relative">
-                                    <button onClick={() => handleDeleteLog(log.id)} className="absolute top-4 right-4 p-1.5 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="삭제"><Trash2 size={14} /></button>
+                                    <button onClick={() => requestDeleteLog(log.id)} className="absolute top-4 right-4 p-1.5 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg opacity-0 group-hover:opacity-100 transition-all" title="삭제"><Trash2 size={14} /></button>
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center gap-3">
                                             <span className="text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded flex items-center gap-1">
                                                 {log.date} <span className="text-zinc-300">|</span> {displayTime}
                                             </span>
-
                                             <div className="flex gap-1">
                                                 <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-0.5 rounded">#{log.mood}</span>
                                                 {log.tags && log.tags.map((tag, i) => (<span key={i} className="text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded">#{tag}</span>))}
@@ -116,23 +121,27 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
                                     </div>
                                     <div className="mb-3 pl-1 border-l-2 border-zinc-200 dark:border-zinc-700"><p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed italic pl-2">"{log.summary}"</p></div>
                                     <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/30 relative"><Bot size={14} className="absolute top-3 left-3 text-indigo-500" /><p className="text-xs text-zinc-700 dark:text-zinc-300 pl-6 leading-relaxed font-medium">{log.advice}</p></div>
-</div>
+                                </div>
                             );
                         })
                     )}
                 </div>
             </div>
 
-            {/* 🟢 [추가] 삭제 확인 다이얼로그 렌더링 */}
-            {dialogConfig.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4" onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })}>
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-xs rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col items-center text-center animate-scale-up" onClick={e => e.stopPropagation()}>
-                        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-rose-100 dark:bg-rose-900/30 text-rose-500"><AlertTriangle size={24} /></div>
-                        <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-2">확인 필요</h3>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed whitespace-pre-wrap">{dialogConfig.message}</p>
-                        <div className="flex gap-2 w-full">
-                            <button onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">취소</button>
-                            <button onClick={() => { if (dialogConfig.onConfirm) dialogConfig.onConfirm(); setDialogConfig({ ...dialogConfig, isOpen: false }); }} className="flex-1 py-2.5 rounded-xl text-white font-bold text-sm shadow-lg transition-colors bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">삭제</button>
+            {/* 🟢 삭제 확인 모달 추가 */}
+            {showDeleteModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowDeleteModal(false)}>
+                    <div className="bg-white dark:bg-zinc-900 w-[320px] rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 text-center transform scale-100 transition-all" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Trash2 size={24} className="text-rose-500" />
+                        </div>
+                        <h3 className="font-bold text-lg text-zinc-800 dark:text-zinc-100 mb-2">기록 삭제</h3>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed">
+                            이 마음 기록을 정말 삭제하시겠습니까?<br />삭제 후에는 복구할 수 없습니다.
+                        </p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">취소</button>
+                            <button onClick={confirmDeleteLog} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-500/20 transition-colors">삭제</button>
                         </div>
                     </div>
                 </div>

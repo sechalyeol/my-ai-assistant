@@ -1,8 +1,8 @@
-﻿// Last Updated: 2025-12-10 15:38:38
+﻿// Last Updated: 2025-12-15 22:45:33
 // [Part 1] 파일 상단: 임포트 및 InputModal
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    BookOpen, Search, X, Plus, Star, FileText, ChevronLeft, Bot,
+    BookOpen, Search, X, Plus, Star, FileText, ChevronLeft, ChevronRight, Bot,
     Sparkles, CheckSquare, ExternalLink, Menu, Image, Edit3, Trash2,
     Calendar as CalendarIcon, Clock, Save, Calculator, ArrowRight
 } from 'lucide-react';
@@ -599,7 +599,7 @@ const DevelopmentDetailView = ({ dev, setDev, handleSendMessage, activeBookId, s
         );
     };
 
-    return (
+return (
         <div className="h-full flex flex-col p-6 animate-fade-in overflow-hidden relative">
             {!activeBookId && (
                 <>
@@ -620,7 +620,7 @@ const DevelopmentDetailView = ({ dev, setDev, handleSendMessage, activeBookId, s
             <InputModal isOpen={inputModalState.isOpen} type={inputModalState.type} title={inputModalState.title} value={inputModalState.initialValue} onClose={() => setInputModalState(prev => ({ ...prev, isOpen: false }))} onConfirm={handleInputConfirm} />
             
             {noteModalState.isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
                     <div className={`bg-white dark:bg-zinc-900 w-full rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col h-[80vh] overflow-hidden animate-scale-up transition-all duration-300 ${showCalc ? 'max-w-6xl' : 'max-w-4xl'}`} onClick={e => e.stopPropagation()}>
                         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900">
                             <div><h3 className="font-bold text-lg text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><BookOpen size={20} className="text-indigo-500" /> 학습 노트</h3><p className="text-xs text-zinc-500 mt-0.5 truncate max-w-md">{noteModalState.itemTitle}</p></div>
@@ -647,7 +647,7 @@ const DevelopmentDetailView = ({ dev, setDev, handleSendMessage, activeBookId, s
             )}
             
             {showAiModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
                     <div className="bg-white dark:bg-zinc-900 w-full max-w-3xl h-[80vh] rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden animate-scale-up">
                         <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-white dark:bg-zinc-900">
                             <h3 className="font-bold text-lg text-indigo-700 dark:text-indigo-400 flex items-center gap-2"><Sparkles size={20} /> {studyMode === 'summary' ? "AI 핵심 요약" : "실전 모의고사"}</h3>
@@ -670,9 +670,9 @@ const DevelopmentDetailView = ({ dev, setDev, handleSendMessage, activeBookId, s
                 </div>
             )}
 
-            {/* TOC Modal (커리큘럼 생성) */}
+            {/* TOC Modal */}
             {showTocModal && selectedBookForToc && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6">
                         <h3 className="font-bold text-lg mb-4">목차 설정: {selectedBookForToc.title}</h3>
                         <textarea value={manualToc} onChange={(e) => setManualToc(e.target.value)} placeholder="목차를 여기에 붙여넣으세요..." className="w-full h-64 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm resize-none mb-4 outline-none" />
@@ -684,18 +684,27 @@ const DevelopmentDetailView = ({ dev, setDev, handleSendMessage, activeBookId, s
                 </div>
             )}
 
-            {/* 삭제 모달 */}
+            {/* ✅ [수정됨] 삭제 모달: z-index를 최상위로 올리고 확인 버튼 로직 재점검 */}
             {showDeleteModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-zinc-900 w-[360px] rounded-2xl shadow-2xl border p-6 text-center">
-                        <Trash2 size={32} className="text-rose-500 mx-auto mb-4" />
-                        <h3 className="font-bold text-lg mb-2">삭제 확인</h3>
-                        <p className="text-sm text-zinc-500 mb-6">'{deleteTarget?.title}' 항목을 삭제하시겠습니까?</p>
-                        <div className="flex gap-3"><button onClick={() => setShowDeleteModal(false)} className="flex-1 py-2.5 rounded-xl border font-bold text-sm">취소</button><button onClick={confirmDelete} className="flex-1 py-2.5 rounded-xl bg-rose-500 text-white font-bold text-sm">삭제</button></div>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowDeleteModal(false)}>
+                    <div className="bg-white dark:bg-zinc-900 w-[360px] rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 text-center transform scale-100 transition-all" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Trash2 size={24} className="text-rose-500" />
+                        </div>
+                        <h3 className="font-bold text-lg text-zinc-800 dark:text-zinc-100 mb-2">삭제 확인</h3>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed">
+                            정말로 <strong>'{deleteTarget?.title}'</strong> 항목을<br />삭제하시겠습니까?<br />
+                            <span className="text-xs text-rose-500 block mt-1">(하위 항목도 모두 삭제됩니다)</span>
+                        </p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">취소</button>
+                            <button onClick={confirmDelete} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-500/20 transition-colors">삭제하기</button>
+                        </div>
                     </div>
                 </div>
             )}
             
+            {/* 로딩 인디케이터 (z-index 유지) */}
             {loadingState.isLoading && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-2xl flex flex-col items-center border border-zinc-200 dark:border-zinc-800 w-[300px]">

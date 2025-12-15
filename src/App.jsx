@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-10 15:38:38
+﻿// Last Updated: 2025-12-15 22:45:33
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -7,14 +7,17 @@ import {
     Home, Wallet, Heart, BookOpen, Briefcase, Minus, X, Copy, Square, CheckSquare, Sun, Moon
 } from 'lucide-react';
 
-// 🟢 분리된 컴포넌트들 Import
+// 분리된 컴포넌트들 Import
 import { GROUP_START_DATES, COMMON_SHIFT_PATTERN } from './constants';
+import { getSystemInstruction } from './constants/systemPrompts'; 
+
 import DashboardView from './views/DashboardView';
 import ScheduleDetailView from './views/ScheduleDetailView';
 import MentalDetailView from './views/MentalDetailView';
 import DevelopmentDetailView from './views/DevelopmentDetailView';
 import WorkDetailView from './views/WorkDetailView';
 import SettingsModal from './components/modals/SettingsModal';
+import GlobalSettingsModal from './components/modals/GlobalSettingsModal';
 import {
     ScheduleChatWidget, MentalChatWidget, StudyChatWidget, FinanceChatWidget
 } from './components/widgets/ChatWidgets';
@@ -41,11 +44,15 @@ function App() {
     const [dashboardSubView, setDashboardSubView] = useState('overview');
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [activeBookId, setActiveBookId] = useState(null);
+    
+    // 설정 모달 State
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [showGlobalSettings, setShowGlobalSettings] = useState(false);
 
     const [isLoaded, setIsLoaded] = useState(false);
     const remoteUpdateFlags = useRef(new Set());
 
+    // 데이터 State
     const [todos, setTodos] = useState([]);
     const [settings, setSettings] = useState({ selectedGroup: "운영 1그룹" });
     const [work, setWork] = useState({ manuals: [] });
@@ -53,6 +60,16 @@ function App() {
     const [finance, setFinance] = useState({ totalAsset: 0, items: [] });
     const [mental, setMental] = useState({ logs: [], currentMood: '기록 없음', score: 0, todayAdvice: '' });
     const [dev, setDev] = useState({ tasks: [] });
+
+    // 사용자 정보 State
+    const [user, setUser] = useState({ 
+        name: '고성열 매니저', 
+        role: '인천종합에너지', 
+        avatar: '👨‍💼',
+        certifications: [],
+        skills: [],
+        career: ''
+    });
 
     const [messages, setMessages] = useState([{ id: 1, role: 'ai', type: 'text', content: '안녕하세요. 당신의 성장을 돕는 AI 파트너입니다.' }]);
     const [inputValue, setInputValue] = useState('');
@@ -77,6 +94,16 @@ function App() {
         ipcRenderer.send('save-settings', updatedSettings);
     };
 
+    const handleExportData = (dataToExport) => { 
+        if (dataToExport && Object.keys(dataToExport).length > 0) {
+            ipcRenderer.send('export-selective-data', dataToExport); 
+        } else {
+            ipcRenderer.send('export-all-data'); 
+        }
+    };
+    const handleImportData = () => { alert("데이터 복원 기능은 준비 중입니다."); };
+    const handleResetData = () => { if(confirm("정말 초기화하시겠습니까?")) { ipcRenderer.send('reset-all-data'); window.location.reload(); } };
+
     useEffect(() => {
         const loadSettings = async () => {
             try { const loaded = await ipcRenderer.invoke('load-settings'); if (loaded && loaded.selectedGroup) setSettings(loaded); } catch (e) { console.error("설정 로드 실패", e); }
@@ -89,6 +116,13 @@ function App() {
             if (dataType === 'all' || dataType === 'schedules') { const sData = await ipcRenderer.invoke('load-schedules') || []; remoteUpdateFlags.current.add('schedules'); setTodos(sData); }
             if (dataType === 'all' || dataType === 'finance') { const fData = await ipcRenderer.invoke('load-finance') || { totalAsset: 0, items: [] }; remoteUpdateFlags.current.add('finance'); setFinance(fData); }
             if (dataType === 'all' || dataType === 'mental') { let mData = await ipcRenderer.invoke('load-mental') || { logs: [], currentMood: '기록 없음', score: 0, todayAdvice: '' }; remoteUpdateFlags.current.add('mental'); setMental(mData); }
+            
+            if (dataType === 'all' || dataType === 'user') { 
+                const uData = await ipcRenderer.invoke('load-user-profile');
+                if (uData) setUser(prev => ({ ...prev, ...uData }));
+                remoteUpdateFlags.current.add('user');
+            }
+
             if (dataType === 'all' || dataType === 'development' || dataType === 'work') {
                 const dData = await ipcRenderer.invoke('load-development') || { tasks: [] };
                 const wDataRaw = await ipcRenderer.invoke('load-work');
@@ -114,6 +148,7 @@ function App() {
     useEffect(() => { if (!isLoaded) return; if (remoteUpdateFlags.current.has('development')) { remoteUpdateFlags.current.delete('development'); return; } ipcRenderer.send('save-development', dev); }, [dev, isLoaded]);
     useEffect(() => { if (!isLoaded) return; if (remoteUpdateFlags.current.has('work')) { remoteUpdateFlags.current.delete('work'); return; } ipcRenderer.send('save-work', work); }, [work, isLoaded]);
     useEffect(() => { if (!isLoaded) return; if (remoteUpdateFlags.current.has('equipment')) { remoteUpdateFlags.current.delete('equipment'); return; } ipcRenderer.send('save-equipment', equipment); }, [equipment, isLoaded]);
+    useEffect(() => { if (!isLoaded) return; if (remoteUpdateFlags.current.has('user')) { remoteUpdateFlags.current.delete('user'); return; } ipcRenderer.send('save-user-profile', user); }, [user, isLoaded]);
 
     useEffect(() => {
         const calculateTheme = () => {
@@ -133,7 +168,6 @@ function App() {
 
     const callGeminiAI = async (userText) => {
         try {
-            // 🟢 1. 최신 데이터 로드 (Source of Truth)
             const realSchedules = await ipcRenderer.invoke('load-schedules') || [];
             const realMental = await ipcRenderer.invoke('load-mental') || { logs: [] };
             const realDev = await ipcRenderer.invoke('load-development') || { tasks: [] };
@@ -145,7 +179,6 @@ function App() {
             const todayShift = getShiftForDate(now);
             const currentDateInfo = `Current Date: ${todayStr} (${days[now.getDay()]}), Time: ${now.getHours()}:${now.getMinutes()}`;
 
-            // 🟢 [Context 1] 일정 컨텍스트
             const todoListContext = realSchedules.length > 0
                 ? realSchedules.map(t => {
                     const d = new Date(t.date);
@@ -166,7 +199,6 @@ function App() {
                 .join('\n');
             const futureContext = upcomingScheduleText ? `[Upcoming 7 Days]\n${upcomingScheduleText}` : "No upcoming schedules.";
 
-            // 🟢 [Context 2] 멘탈 히스토리
             const twoWeeksAgo = new Date(now);
             twoWeeksAgo.setDate(now.getDate() - 14);
             const recentLogs = realMental.logs
@@ -176,7 +208,6 @@ function App() {
                 ? recentLogs.map(l => `${l.date} | Mood: ${l.mood} | Score: ${l.score} | Note: "${l.summary}"`).join('\n')
                 : "No recent records.";
 
-            // 🟢 [Context 3] 서재 및 설비
             const generateCurriculumContext = (tasks) => {
                 let context = "";
                 tasks.forEach(book => {
@@ -185,107 +216,16 @@ function App() {
                 return context ? context : "서재가 비어있습니다.";
             };
             const libraryContext = generateCurriculumContext(realDev.tasks || []);
-            const equipContext = realEquip.list.map(e => `[Equip: ${e.title}] (${e.meta.code})`).join('\n') || "등록된 설비 없음";
-
-            // 🟢 [System Instruction] 프롬프트 조립
-            const systemInstruction = `
-            You are 'AI Partner Pro'.
-
-        [🚨 CRITICAL RULES - READ THIS FIRST]
-        1. **SOURCE OF TRUTH**: The [Existing Schedules] list below is the **ONLY** truth.
-        2. **IGNORE MEMORY**: Do NOT rely on previous conversation history.
-        3. **UNCONDITIONAL EXECUTION**: 
-           - When the user asks to add a schedule (e.g., "Add PT"), **DO NOT** check for duplicates yourself.
-           - **ALWAYS** generate the 'add_todo' JSON action immediately.
-        4. **ALWAYS JSON**: Output JSON command only.
-
-        [Context]
-        - Current Time: ${currentDateInfo}
-        - **Today's Shift**: ${todayShift}
-        - **Existing Schedules (All)**: 
-        ${todoListContext}
-        
-        - **Upcoming Schedules (Strategy Context)**:
-        ${futureContext}
-        
-        - **Mental History (Last 2 Weeks)**:
-        ${mentalHistoryText}
-        
-        - **User's Library**:
-        ${libraryContext}
-
-        [Task 1: Schedule Management] (Priority: High)
-        - Use JSON actions (add_todo, etc.) for schedule commands.
-        - "주간/대근" -> 07:30~19:30, "야간/대근" -> 19:30~07:30.
-        - **Category Rules**:
-          - "health": PT, 헬스, 운동, 병원
-          - "work": 회의, 업무, 출장
-          - "shift": 근무, 대근
-          - "finance": 은행, 주식
-          - "development": 공부, 독서
-          - "personal": 약속, 여행
-
-        [Task 2: Mental Care & Comprehensive Analysis] (Priority: High)
-        - **Trigger**: When user inputs a mood/diary (e.g., "오늘 힘들었어", "기분 좋아", "일기: ...").
-        - **Action**: "analyze_mental"
-        
-        - **Logic for 'advice' (Specific Feedback)**:
-           - Analyze the *current* sentiment/score (0-19:Worst, 90-100:Perfect).
-           - Give warm empathy or praise for *this specific input*.
-           
-        - **Logic for 'daily_advice' (Strategic Insight)**:
-           - **Look at the Trend**: Is the score dropping over 2 weeks? (Burnout warning). Rising? (Keep it up).
-           - **Look at the Schedule**: 
-             - Big event coming up? -> Advice on preparation/mindset.
-             - Empty schedule? -> Suggest rest/hobby.
-           - **Look at the Shift**: 
-             - Use shift context wisely (e.g., Night shift + Exam = Sleep strategy).
-           - **Output**: One strategic, helpful sentence in Korean.
-
-        [Task 3: Self-Development & Library]
-        - **Check Library**: If user asks "What books?", read [User's Library].
-        - **Study Tracking**: "I studied [Topic]" -> **ACTION: "record_study"** (mark_done: true).
-        - **Note Taking**: "Note that [Content]" -> **ACTION: "record_study"** (note: Content).
-        - **Quiz Request**: "Quiz on [Topic]" -> **ACTION: "start_quiz"** (topic: Topic).
-
-        [Task 4: Dashboard Widgets]
-        - Trigger: "Check schedule", "Show finance", "Mental status", "Study progress" -> Use "show_X" actions.
-
-        [Task 5: Facility Management] (Priority: High)
-        - **Trigger**: User mentions equipment maintenance, repair, or operation (e.g., "1호기 밸브 교체했어", "가스터빈 점검 완료").
-        - **Action**: "add_equipment_log"
-        - **Logic**: 
-          1. Identify the equipment from [Equipment List] using fuzzy matching (e.g., "1호기" -> "가스터빈 1호기").
-          2. If equipment is found, use its ID. If not sure, set equipId to null.
-          3. Extract the content of the maintenance/operation.
-
-        [JSON Schema]
-        { 
-          "action": "analyze_mental", 
-          "summary": "string", 
-          "mood": "string", 
-          "score": number, 
-          "advice": "Feedback for THIS input", 
-          "daily_advice": "Strategic advice based on history & schedule", 
-          "tags": ["string"] 
-        }
-        { "action": "add_todo", "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string", "category": "string" }
-        { "action": "modify_todo", "id": number, "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string" }
-        { "action": "delete_todo", "id": number }
-        { "action": "search_books", "results": [] }
-        { "action": "generate_curriculum", "title": "string", ... } 
-        { "action": "record_study", "topic": "string", "note": "string", "mark_done": boolean }
-        { "action": "delete_book", "id": "string" }
-        { "action": "show_schedule" }
-        { "action": "show_finance" }
-        { "action": "show_mental" }
-        { "action": "show_development" }
-        { "action": "chat", "message": "string" }
-        { "action": "start_quiz", "topic": "string" }
-        { "action": "add_equipment_log", "equipId": number|null, "content": "string", "date": "YYYY-MM-DD" }
-        
-        IMPORTANT: If multiple actions needed, return a JSON ARRAY.
-            `;
+            
+            // 시스템 프롬프트 생성 (외부 파일 사용)
+            const systemInstruction = getSystemInstruction({
+                currentDateInfo,
+                todayShift,
+                todoListContext,
+                futureContext,
+                mentalHistoryText,
+                libraryContext
+            });
 
             const model = genAI.getGenerativeModel({
                 model: "gemini-2.5-pro",
@@ -472,13 +412,21 @@ function App() {
             case 'overview': default:
                 return (
                     <DashboardView
-                        todos={todos} setTodos={setTodos} finance={finance} setFinance={setFinance} mental={mental} setMental={setMental} dev={dev} setDev={setDev}
+                        // 🟢 [핵심 수정] 이전 버전의 Prop 이름(schedules, development)도 함께 전달하여 끊김 방지
+                        todos={todos} schedules={todos} 
+                        setTodos={setTodos} 
+                        finance={finance} setFinance={setFinance} 
+                        mental={mental} setMental={setMental} 
+                        dev={dev} development={dev} 
+                        setDev={setDev}
+                        work={work} setWork={setWork}
+                        // 기타 props
                         dashboardSubView={dashboardSubView} setDashboardSubView={setDashboardSubView}
                         isSidebarExpanded={isSidebarExpanded} setIsSidebarExpanded={setIsSidebarExpanded}
                         handleSendMessage={handleSendMessage} settings={settings} handleGroupChange={handleGroupChange}
-                        activeBookId={activeBookId} setActiveBookId={setActiveBookId} work={work} setWork={setWork}
+                        activeBookId={activeBookId} setActiveBookId={setActiveBookId}
                         setWorkViewMode={setWorkViewMode} workViewMode={workViewMode} equipment={equipment} setEquipment={setEquipment}
-                        setShowSettingsModal={setShowSettingsModal}
+                        setShowSettingsModal={setShowSettingsModal} user={user}
                     />
                 );
         }
@@ -503,13 +451,42 @@ function App() {
                                 <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} settings={settings} onUpdateSettings={handleGroupChange} />
                                 <div className={`flex flex-col flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 transition-all duration-300 ${isSidebarExpanded ? 'w-[280px] p-4' : 'w-[64px] py-4 px-2 items-center'}`}>
                                     <button onClick={() => setIsSidebarExpanded(p => !p)} className={`p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors mb-6 ${isSidebarExpanded ? 'self-start' : 'self-center'}`}><Menu size={20} className="text-zinc-500" /></button>
-                                    {isSidebarExpanded ? (<div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-6 w-full border border-zinc-200 dark:border-zinc-700/50 p-3 flex items-center justify-between animate-fade-in shadow-sm gap-2"><div className="flex items-center gap-3 min-w-0 overflow-hidden"><div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-200 dark:border-indigo-800"><Users size={20} /></div><div className="min-w-0 flex flex-col justify-center"><p className="font-bold text-sm truncate text-zinc-800 dark:text-zinc-100 leading-tight">고성열 매니저</p><p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">인천종합에너지</p></div></div><div className="flex items-center gap-1 shrink-0"><button className="w-6 h-6 rounded-full flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-zinc-700 transition-all shadow-sm"><Edit3 size={12} /></button><button onClick={() => setShowSettingsModal(true)} className="w-6 h-6 rounded-full flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-zinc-700 transition-all shadow-sm"><Settings size={12} /></button><button className="w-6 h-6 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-500 hover:bg-white dark:hover:bg-zinc-700 transition-all shadow-sm"><LogOut size={12} /></button></div></div>) : (<div className="mb-6 w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mx-auto border border-indigo-200 dark:border-indigo-800 cursor-pointer"><Users size={20} /></div>)}
+                                    {isSidebarExpanded ? (
+                                        <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-6 w-full border border-zinc-200 dark:border-zinc-700/50 p-3 flex items-center justify-between animate-fade-in shadow-sm gap-2">
+                                            <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+                                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 border border-indigo-200 dark:border-indigo-800">
+                                                    {user.avatar && user.avatar.startsWith('data:') ? (
+                                                        <img src={user.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" />
+                                                    ) : (
+                                                        <span className="text-lg">{user.avatar || <Users size={20} />}</span>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0 flex flex-col justify-center">
+                                                    <p className="font-bold text-sm truncate text-zinc-800 dark:text-zinc-100 leading-tight">{user.name}</p>
+                                                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{user.role}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button onClick={() => setShowGlobalSettings(true)} className="w-6 h-6 rounded-full flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-zinc-700 transition-all shadow-sm"><Settings size={12} /></button>
+                                                <button className="w-6 h-6 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-500 hover:bg-white dark:hover:bg-zinc-700 transition-all shadow-sm"><LogOut size={12} /></button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="mb-6 w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mx-auto border border-indigo-200 dark:border-indigo-800 cursor-pointer">
+                                            {user.avatar && user.avatar.startsWith('data:') ? (
+                                                <img src={user.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" />
+                                            ) : (
+                                                <span className="text-lg">{user.avatar || <Users size={20} />}</span>
+                                            )}
+                                        </div>
+                                    )}
                                     <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2">
-                                        <div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2 px-2 mt-2">Common</h3>}<div className="space-y-1"><SideBarItem icon={Home} label="대시보드 개요" active={dashboardSubView === 'overview'} onClick={() => setDashboardSubView('overview')} isExpanded={isSidebarExpanded} />{(settings.visibleModules?.schedule) && <SideBarItem icon={CalendarIcon} label="통합 일정" active={dashboardSubView === 'schedules'} onClick={() => setDashboardSubView('schedules')} isExpanded={isSidebarExpanded} />}</div></div>
-                                        {!isSidebarExpanded && (settings.visibleModules?.finance || settings.visibleModules?.mental) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
-                                        {(settings.visibleModules?.finance || settings.visibleModules?.mental) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-indigo-500/70 dark:text-indigo-400/70 mb-2 px-2 mt-4">Personal Life</h3>}<div className="space-y-1">{settings.visibleModules?.finance && <SideBarItem icon={Wallet} label="자산관리" active={dashboardSubView === 'finance'} onClick={() => setDashboardSubView('finance')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.mental && <SideBarItem icon={Heart} label="멘탈관리" active={dashboardSubView === 'mental'} onClick={() => setDashboardSubView('mental')} isExpanded={isSidebarExpanded} />}</div></div>)}
-                                        {!isSidebarExpanded && (settings.visibleModules?.development || settings.visibleModules?.work) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
-                                        {(settings.visibleModules?.development || settings.visibleModules?.work) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/70 dark:text-emerald-400/70 mb-2 px-2 mt-4">Work & Growth</h3>}<div className="space-y-1">{settings.visibleModules?.development && <SideBarItem icon={BookOpen} label="자기개발" active={dashboardSubView === 'development'} onClick={() => setDashboardSubView('development')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.work && <SideBarItem icon={Briefcase} label="직무교육" active={dashboardSubView === 'work'} onClick={() => setDashboardSubView('work')} isExpanded={isSidebarExpanded} />}</div></div>)}
+                                            <div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2 px-2 mt-2">Common</h3>}<div className="space-y-1"><SideBarItem icon={Home} label="대시보드 개요" active={dashboardSubView === 'overview'} onClick={() => setDashboardSubView('overview')} isExpanded={isSidebarExpanded} />{(settings.visibleModules?.schedule) && <SideBarItem icon={CalendarIcon} label="통합 일정" active={dashboardSubView === 'schedules'} onClick={() => setDashboardSubView('schedules')} isExpanded={isSidebarExpanded} />}</div></div>
+                                            {!isSidebarExpanded && (settings.visibleModules?.finance || settings.visibleModules?.mental) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
+                                            {(settings.visibleModules?.finance || settings.visibleModules?.mental) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-indigo-500/70 dark:text-indigo-400/70 mb-2 px-2 mt-4">Personal Life</h3>}<div className="space-y-1">{settings.visibleModules?.finance && <SideBarItem icon={Wallet} label="자산관리" active={dashboardSubView === 'finance'} onClick={() => setDashboardSubView('finance')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.mental && <SideBarItem icon={Heart} label="멘탈관리" active={dashboardSubView === 'mental'} onClick={() => setDashboardSubView('mental')} isExpanded={isSidebarExpanded} />}</div></div>)}
+                                            {!isSidebarExpanded && (settings.visibleModules?.development || settings.visibleModules?.work) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
+                                            {(settings.visibleModules?.development || settings.visibleModules?.work) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/70 dark:text-emerald-400/70 mb-2 px-2 mt-4">Work & Growth</h3>}<div className="space-y-1">{settings.visibleModules?.development && <SideBarItem icon={BookOpen} label="자기개발" active={dashboardSubView === 'development'} onClick={() => setDashboardSubView('development')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.work && <SideBarItem icon={Briefcase} label="직무교육" active={dashboardSubView === 'work'} onClick={() => setDashboardSubView('work')} isExpanded={isSidebarExpanded} />}</div></div>)}
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950/80">{renderSubView()}</div>
@@ -539,6 +516,17 @@ function App() {
                     </div>
                 </div>
             </div>
+
+            <GlobalSettingsModal 
+                isOpen={showGlobalSettings}
+                onClose={() => setShowGlobalSettings(false)}
+                user={user}
+                setUser={setUser}
+                allData={{ todos, finance, mental, dev, work, equipment }}
+                onExportData={handleExportData}
+                onImportData={handleImportData}
+                onResetData={handleResetData}
+            />
         </div>
     );
 }

@@ -2,59 +2,6 @@
   "tasks": [
     {
       "action": "generate_curriculum",
-      "title": "2025 [직8딴] 직접 8일 만에 딴 대기환경기사 실기 (유튜브 해설강의+기출 중복문제 소거+저자 실시간 질문답변)",
-      "cover": "https://shopping-phinf.pstatic.net/main_5411649/54116491313.20250602073222.jpg",
-      "author": "김진태",
-      "publisher": "EHS MASTER",
-      "children": [
-        {
-          "title": "(필독!) 작가 자기소개 및 8일 공부법 및 이 책의 특징 및 대기환경기사 기본정보",
-          "id": "17646667242646m3gz9db8",
-          "children": [
-            {
-              "id": "1764956982614tl6l6v67q",
-              "title": "1.",
-              "done": false,
-              "children": []
-            }
-          ]
-        },
-        {
-          "title": "2011~2024년 필답 계산형기출 중복문제 소거 정리",
-          "id": "1764666724264l68ce9al0",
-          "children": []
-        },
-        {
-          "title": "2011~2024년 필답 서술형기출 중복문제 소거 정리",
-          "id": "1764666724264nixrtflvh",
-          "children": []
-        },
-        {
-          "title": "2022년필답형 기출문제",
-          "id": "1764666724264kz8jvpuwt",
-          "children": []
-        },
-        {
-          "title": "2023년필답형 기출문제",
-          "id": "17646667242641gazhzt64",
-          "children": []
-        },
-        {
-          "title": "2024년필답형 기출문제",
-          "id": "1764666724264pqone5aqe",
-          "children": []
-        },
-        {
-          "title": "미출시 필답형 문제신출 대비",
-          "id": "1764666724264moeeks2t3",
-          "children": []
-        }
-      ],
-      "id": "1764666724264mjf2hxxgu",
-      "isStarred": false
-    },
-    {
-      "action": "generate_curriculum",
       "title": "회로이론",
       "cover": "https://shopping-phinf.pstatic.net/main_4997380/49973804627.20240827074900.jpg",
       "author": "이덕출, 이능헌, 고의석, 이동인",
@@ -747,6 +694,59 @@
         }
       ],
       "id": "1764574829685eiva6d7yw",
+      "isStarred": true
+    },
+    {
+      "action": "generate_curriculum",
+      "title": "2025 [직8딴] 직접 8일 만에 딴 대기환경기사 실기 (유튜브 해설강의+기출 중복문제 소거+저자 실시간 질문답변)",
+      "cover": "https://shopping-phinf.pstatic.net/main_5411649/54116491313.20250602073222.jpg",
+      "author": "김진태",
+      "publisher": "EHS MASTER",
+      "children": [
+        {
+          "title": "(필독!) 작가 자기소개 및 8일 공부법 및 이 책의 특징 및 대기환경기사 기본정보",
+          "id": "17646667242646m3gz9db8",
+          "children": [
+            {
+              "id": "1764956982614tl6l6v67q",
+              "title": "1.",
+              "done": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "title": "2011~2024년 필답 계산형기출 중복문제 소거 정리",
+          "id": "1764666724264l68ce9al0",
+          "children": []
+        },
+        {
+          "title": "2011~2024년 필답 서술형기출 중복문제 소거 정리",
+          "id": "1764666724264nixrtflvh",
+          "children": []
+        },
+        {
+          "title": "2022년필답형 기출문제",
+          "id": "1764666724264kz8jvpuwt",
+          "children": []
+        },
+        {
+          "title": "2023년필답형 기출문제",
+          "id": "17646667242641gazhzt64",
+          "children": []
+        },
+        {
+          "title": "2024년필답형 기출문제",
+          "id": "1764666724264pqone5aqe",
+          "children": []
+        },
+        {
+          "title": "미출시 필답형 문제신출 대비",
+          "id": "1764666724264moeeks2t3",
+          "children": []
+        }
+      ],
+      "id": "1764666724264mjf2hxxgu",
       "isStarred": false
     },
     {

@@ -1,12 +1,11 @@
-﻿// Last Updated: 2025-12-10 15:38:38
-// [Part 1] 파일 상단: 임포트, 헬퍼 함수, State 초기화
-import React, { useState, useRef } from 'react';
+﻿// Last Updated: 2025-12-15 22:45:33
+import React, { useState, useRef, useEffect } from 'react';
 import {
     Briefcase, BookOpen, Wrench, AlertTriangle, ChevronRight, Plus, Edit3, Trash2,
     ChevronLeft, FileText, Image, ArrowRight, Menu, History, Bot, Lock, Zap,
-    AlertCircle, X
+    AlertCircle, X, Download, Upload, PanelRightClose, PanelRightOpen, GripVertical
 } from 'lucide-react';
-import PanZoomViewer from '../components/ui/PanZoomViewer'; // 1단계에서 만든 뷰어 컴포넌트
+import PanZoomViewer from '../components/ui/PanZoomViewer';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -21,9 +20,9 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const [logModal, setLogModal] = useState({ isOpen: false, content: '' });
 
     // 현장 가이드 상세 화면용 State
-    const [guideDetailModal, setGuideDetailModal] = useState({ isOpen: false, guide: null });
     const [activeFieldGuideId, setActiveFieldGuideId] = useState(null);
     const [currentStepId, setCurrentStepId] = useState(null);
+    const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false); // 기본값 닫힘
 
     // --- 기본 상태 (기초 교육용) ---
     const lastScrollTime = useRef(0);
@@ -37,18 +36,16 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const [modalConfig, setModalConfig] = useState({ isOpen: false, type: '', title: '' });
     const [dialogConfig, setDialogConfig] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
 
-    // 입력 폼 (공용)
+    // 입력 폼
     const [inputTitle, setInputTitle] = useState('');
     const [inputDesc, setInputDesc] = useState('');
     const [inputCategory, setInputCategory] = useState('FIELD');
-    const [inputSteps, setInputSteps] = useState([{ text: '' }]); // 구조: [{ text: "내용" }]
+    const [inputSteps, setInputSteps] = useState([{ text: '' }]); // Legacy support
 
-    // 설비 입력 폼
     const [equipTitle, setEquipTitle] = useState('');
     const [equipCode, setEquipCode] = useState('');
     const [equipDesc, setEquipDesc] = useState('');
 
-    // 파일 및 기타
     const [manualAttachments, setManualAttachments] = useState([]);
     const [newCatName, setNewCatName] = useState('');
     const [newCatId, setNewCatId] = useState('');
@@ -69,7 +66,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         { id: 'fuchsia', bg: 'bg-fuchsia-500' }, { id: 'pink', bg: 'bg-pink-500' }, { id: 'rose', bg: 'bg-rose-500' }
     ];
 
-    // --- 헬퍼 함수 ---
     const getDocTypeStyle = (type) => {
         switch (type) {
             case 'PID': return { color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', icon: FileText, label: 'P&ID' };
@@ -109,8 +105,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const closeDialog = () => { setDialogConfig({ ...dialogConfig, isOpen: false }); };
     const getActiveItem = (listName) => (work[listName] || []).find(i => i.id === activeId);
 
-    // [Part 2] 파일 핸들러 및 데이터 CRUD 로직
-
     // --- 파일 핸들러 ---
     const handleSelectFile = async (type) => {
         try {
@@ -122,7 +116,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             }
         } catch (error) {
             console.error("파일 선택 오류:", error);
-            // 만약 select-any-file이 실패하면 이미지 선택으로 폴백(예외처리)
             const filePath = await ipcRenderer.invoke('select-image');
             if (filePath) {
                 const name = filePath.split(/[/\\]/).pop();
@@ -136,7 +129,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             const filePath = await ipcRenderer.invoke('select-image');
             if (!filePath) return;
             
-            // 로컬 이미지 미리보기를 위해 Base64 변환
             const fs = window.require('fs');
             const path = window.require('path');
             const fileData = fs.readFileSync(filePath);
@@ -184,19 +176,15 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         }
     };
 
-    // --- 동적 입력 핸들러 (스텝 추가/삭제) ---
     const handleStepChange = (index, value) => {
         const newSteps = [...inputSteps];
         newSteps[index].text = value;
         setInputSteps(newSteps);
     };
 
-    const addInputStep = () => {
-        setInputSteps([...inputSteps, { text: '' }]);
-    };
-
+    const addInputStep = () => { setInputSteps([...inputSteps, { text: '' }]); };
     const removeInputStep = (index) => {
-        if (inputSteps.length === 1) return; // 최소 1개는 유지
+        if (inputSteps.length === 1) return;
         const newSteps = inputSteps.filter((_, i) => i !== index);
         setInputSteps(newSteps);
     };
@@ -234,20 +222,12 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         setModalConfig({ isOpen: true, type: 'EDIT_CATEGORY', title: '카테고리 수정' });
     };
 
-    // 현장 가이드(Field Guide) 수정 핸들러
     const handleEditFieldGuide = (e, guide) => {
         e.stopPropagation();
         setEditingManualId(guide.id);
         setInputTitle(guide.title);
-
-        // 기존 steps 배열을 불러오거나, 없으면 desc를 줄바꿈으로 쪼개서 로드
-        let existingSteps = [];
-        if (guide.steps && guide.steps.length > 0) {
-            existingSteps = guide.steps.map(s => typeof s === 'string' ? { text: s } : { text: s.text || s });
-        } else if (guide.desc) {
-            existingSteps = guide.desc.split('\n').map(t => ({ text: t }));
-        }
-        setInputSteps(existingSteps.length > 0 ? existingSteps : [{ text: '' }]);
+        setInputDesc(guide.desc || '');
+        setManualAttachments(guide.attachments || []);
 
         const modalTitle = guide.type === 'TROUBLE' ? '고장 조치 매뉴얼 수정' : '기기 조작법 수정';
         setModalConfig({ isOpen: true, type: 'EDIT_FIELD_GUIDE', title: modalTitle });
@@ -256,16 +236,11 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const handleDeleteFieldGuide = (e, id) => {
         e.stopPropagation();
         safeConfirm("이 가이드를 정말 삭제하시겠습니까?", () => {
-            setEquipment(prev => ({
-                ...prev,
-                fieldGuides: (prev.fieldGuides || []).filter(g => g.id !== id)
-            }));
+            setEquipment(prev => ({ ...prev, fieldGuides: (prev.fieldGuides || []).filter(g => g.id !== id) }));
         });
     };
 
-    // 🟢 [핵심] 저장 로직 (통합)
     const handleSaveData = () => {
-        // 1. 공통 기초 교육 관련
         if (modalConfig.type === 'ADD_CATEGORY') {
             if (!newCatName.trim()) return;
             const finalId = newCatId.trim() ? newCatId.trim() : `CAT_${Date.now()}`;
@@ -303,8 +278,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             });
             setNewStepForm({ imagePath: '', title: '', content: '' });
         }
-
-        // 2. 설비 마스터 관련
         else if (modalConfig.type === 'ADD_EQUIPMENT') {
             if (!equipTitle.trim()) return;
             const newEquip = {
@@ -318,43 +291,29 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         else if (modalConfig.type === 'ADD_EQUIP_DOC') {
             if (!inputTitle.trim()) return;
             const newDoc = {
-                id: Date.now(),
-                title: inputTitle,
-                type: 'PID',
+                id: Date.now(), title: inputTitle, type: 'PID',
                 path: manualAttachments.length > 0 ? manualAttachments[0].path : null
             };
-            setEquipment(prev => ({
-                ...prev,
-                list: prev.list.map(e => e.id === activeEquipId ? { ...e, documents: [...(e.documents || []), newDoc] } : e)
-            }));
+            setEquipment(prev => ({ ...prev, list: prev.list.map(e => e.id === activeEquipId ? { ...e, documents: [...(e.documents || []), newDoc] } : e) }));
         }
         else if (modalConfig.type === 'ADD_EQUIP_CHAPTER') {
             if (!inputTitle.trim()) return;
             setEquipment(prev => ({
-                ...prev,
-                list: prev.list.map(e => e.id === activeEquipId ? {
-                    ...e,
-                    chapters: [...(e.chapters || []), { id: Date.now(), title: inputTitle, docId: null, isDone: false }]
+                ...prev, list: prev.list.map(e => e.id === activeEquipId ? {
+                    ...e, chapters: [...(e.chapters || []), { id: Date.now(), title: inputTitle, docId: null, isDone: false }]
                 } : e)
             }));
         }
         else if (modalConfig.type === 'ADD_FIELD_GUIDE' || modalConfig.type === 'EDIT_FIELD_GUIDE') {
             if (!inputTitle.trim()) return;
-
-            // steps 배열 가공 (빈 값 제거)
-            const validSteps = inputSteps
-                .filter(s => s.text.trim() !== '')
-                .map((s, idx) => ({ id: idx, text: s.text }));
-
-            const descPreview = validSteps.map(s => s.text).join('\n'); // 미리보기용
-
             if (modalConfig.type === 'ADD_FIELD_GUIDE') {
                 const newGuide = {
                     id: Date.now(),
                     type: modalConfig.title.includes('고장') ? 'TROUBLE' : 'OPERATION',
                     title: inputTitle,
-                    desc: descPreview,
-                    steps: validSteps, // 🔥 배열로 저장
+                    desc: inputDesc,
+                    attachments: manualAttachments,
+                    steps: [],
                     tags: ['신규']
                 };
                 setEquipment(prev => ({ ...prev, fieldGuides: [...(prev.fieldGuides || []), newGuide] }));
@@ -362,19 +321,31 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                 setEquipment(prev => ({
                     ...prev,
                     fieldGuides: prev.fieldGuides.map(g => g.id === editingManualId ? {
-                        ...g,
-                        title: inputTitle,
-                        desc: descPreview,
-                        steps: validSteps // 🔥 배열로 업데이트
+                        ...g, title: inputTitle, desc: inputDesc, attachments: manualAttachments
                     } : g)
                 }));
                 setEditingManualId(null);
             }
         }
+        else if (modalConfig.type === 'ADD_FIELD_STEP') {
+            setEquipment(prev => ({
+                ...prev,
+                fieldGuides: prev.fieldGuides.map(g => g.id === activeFieldGuideId ? {
+                    ...g,
+                    steps: [...(g.steps || []), {
+                        id: Date.now(),
+                        title: newStepForm.title,
+                        content: newStepForm.content,
+                        image: newStepForm.imagePath
+                    }]
+                } : g)
+            }));
+            setNewStepForm({ imagePath: '', title: '', content: '' });
+        }
 
         setModalConfig({ ...modalConfig, isOpen: false });
         setInputTitle(''); setInputDesc(''); setManualAttachments([]);
-        setInputSteps([{ text: '' }]); // 초기화
+        setInputSteps([{ text: '' }]);
     };
 
     const handleSaveStepEdit = () => {
@@ -415,108 +386,13 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const handleAddLog = () => {
         if (!logModal.content.trim()) return;
         const newLog = {
-            id: Date.now(),
-            date: new Date().toISOString().split('T')[0],
-            content: logModal.content,
-            type: 'USER'
+            id: Date.now(), date: new Date().toISOString().split('T')[0], content: logModal.content, type: 'USER'
         };
-        setEquipment(prev => ({
-            ...prev,
-            list: prev.list.map(e => e.id === activeEquipId ? { ...e, logs: [newLog, ...(e.logs || [])] } : e)
-        }));
+        setEquipment(prev => ({ ...prev, list: prev.list.map(e => e.id === activeEquipId ? { ...e, logs: [newLog, ...(e.logs || [])] } : e) }));
         setLogModal({ isOpen: false, content: '' });
     };
 
-    // [Part 3] 슬라이드 오버 패널 & 홈 화면 렌더링
-
-    // 🟢 우측 슬라이드 오버 패널 (Detail View)
-    const GuideDetailPanel = ({ guide, onClose, onEdit, onDelete }) => {
-        if (!guide) return null;
-
-        // desc가 일반 텍스트면 그냥 보여주고, 줄바꿈이 있으면 단계로 끊어서 보여줌
-        const steps = guide.steps && guide.steps.length > 0
-            ? guide.steps
-            : (guide.desc || "").split('\n').filter(s => s.trim()).map((s, i) => ({ id: i, text: s }));
-
-        const isTrouble = guide.type === 'TROUBLE';
-
-        return (
-            <div className="fixed inset-0 z-[70] overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-                <div className="absolute inset-0 overflow-hidden">
-                    <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] transition-opacity animate-fade-in" onClick={onClose}></div>
-                    <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
-                        <div className="pointer-events-auto w-screen max-w-md transform transition duration-500 ease-in-out sm:duration-700 animate-slide-in-right">
-                            <div className="flex h-full flex-col overflow-y-scroll bg-white dark:bg-zinc-900 shadow-2xl border-l border-zinc-200 dark:border-zinc-800">
-
-                                {/* 헤더 영역 */}
-                                <div className={`px-6 py-6 border-b ${isTrouble ? 'bg-rose-50/50 dark:bg-rose-900/10 border-rose-100' : 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100'}`}>
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ${isTrouble ? 'bg-rose-100 text-rose-700 ring-rose-600/20' : 'bg-emerald-100 text-emerald-700 ring-emerald-600/20'}`}>
-                                                {isTrouble ? <AlertTriangle size={12} /> : <Zap size={12} />}
-                                                {isTrouble ? '긴급 조치 (Trouble)' : '표준 조작 (Operation)'}
-                                            </span>
-                                        </div>
-                                        <div className="ml-3 flex h-7 items-center gap-2">
-                                            <button onClick={() => onEdit(guide)} className="rounded-md p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-zinc-100 transition-colors" title="수정"><Edit3 size={16} /></button>
-                                            <button onClick={() => onDelete(guide.id)} className="rounded-md p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-zinc-100 transition-colors" title="삭제"><Trash2 size={16} /></button>
-                                            <button onClick={onClose} className="rounded-md p-1.5 text-zinc-400 hover:text-zinc-500 hover:bg-zinc-100 transition-colors"><X size={20} /></button>
-                                        </div>
-                                    </div>
-                                    <h2 className="text-2xl font-bold leading-7 text-zinc-900 dark:text-zinc-100 mt-2">{guide.title}</h2>
-                                    <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">최종 업데이트: {new Date(guide.id).toLocaleDateString()}</p>
-                                </div>
-
-                                {/* 컨텐츠 영역 */}
-                                <div className="relative flex-1 px-6 py-6 sm:px-6">
-                                    {isTrouble && (
-                                        <div className="rounded-xl bg-rose-50 dark:bg-rose-900/20 p-4 mb-8 border border-rose-100 dark:border-rose-900/30">
-                                            <div className="flex">
-                                                <div className="flex-shrink-0"><AlertCircle className="h-5 w-5 text-rose-400" aria-hidden="true" /></div>
-                                                <div className="ml-3">
-                                                    <h3 className="text-sm font-bold text-rose-800 dark:text-rose-200">작업 전 안전 수칙</h3>
-                                                    <div className="mt-2 text-sm text-rose-700 dark:text-rose-300"><ul className="list-disc space-y-1 pl-5"><li>반드시 2인 1조로 작업하십시오.</li><li>해당 구역의 전원을 차단(LOTO) 후 진입하십시오.</li></ul></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flow-root">
-                                        <ul role="list" className="-mb-8">
-                                            {steps.map((step, stepIdx) => (
-                                                <li key={stepIdx}>
-                                                    <div className="relative pb-8">
-                                                        {stepIdx !== steps.length - 1 ? (<span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-zinc-200 dark:bg-zinc-700" aria-hidden="true" />) : null}
-                                                        <div className="relative flex space-x-3">
-                                                            <div><span className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white dark:ring-zinc-900 font-bold text-sm ${isTrouble ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>{stepIdx + 1}</span></div>
-                                                            <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                                                                <div>
-                                                                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 whitespace-pre-wrap leading-relaxed">{step.text || step}</p>
-                                                                    {step.image && (<div className="mt-3 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm"><img src={step.image} alt="Step Detail" className="w-full h-auto object-cover" /></div>)}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                {/* 하단 액션 버튼 */}
-                                <div className="flex flex-shrink-0 justify-end px-4 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-200 dark:border-zinc-800">
-                                    <button type="button" className="rounded-xl bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-900 dark:text-zinc-200 shadow-sm ring-1 ring-inset ring-zinc-300 dark:ring-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700" onClick={onClose}>닫기</button>
-                                    <button type="button" className={`ml-4 inline-flex justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isTrouble ? 'bg-rose-600 hover:bg-rose-500 focus-visible:outline-rose-600' : 'bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-600'}`} onClick={onClose}>확인 완료</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    // --- 렌더러 1: 홈 화면 ---
+    // --- 렌더러 ---
     const renderHome = () => (
         <div className="animate-fade-in p-2 space-y-8 max-w-6xl mx-auto">
             <div className="flex flex-col gap-2">
@@ -549,7 +425,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         </div>
     );
 
-// [Part 4] 기초 교육 리스트 렌더링 (이 부분이 빠져 있었습니다!)
     const renderBasicList = () => {
         const manuals = work.manuals || [];
         const categories = work.categories || [];
@@ -576,10 +451,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                     </div>
                     <div><h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100 mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{m.title}</h3><p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{m.desc}</p></div>
                     <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 text-zinc-500 font-medium">
-                            <span className="flex items-center gap-1"><BookOpen size={14} className="text-zinc-400" /> {(m.chapters || []).length} Chapters</span>
-                            {attachCount > 0 && <span className="flex items-center gap-1 text-indigo-500"><FileText size={14} /> {attachCount}</span>}
-                        </div>
+                        <div className="flex items-center gap-2 text-zinc-500 font-medium"><span className="flex items-center gap-1"><BookOpen size={14} className="text-zinc-400" /> {(m.chapters || []).length} Chapters</span>{attachCount > 0 && <span className="flex items-center gap-1 text-indigo-500"><FileText size={14} /> {attachCount}</span>}</div>
                         <span className="text-zinc-400 group-hover:translate-x-1 transition-transform group-hover:text-indigo-500"><ChevronRight size={14} /></span>
                     </div>
                 </div>
@@ -589,15 +461,10 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         return (
             <div className="h-full flex flex-col animate-fade-in">
                 <div className="flex flex-col gap-4 mb-6 px-2">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3"><button onClick={() => setViewMode('HOME')} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"><ChevronLeft size={20} /></button><h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">공통 기초 교육</h2></div>
-                    </div>
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={() => setViewMode('HOME')} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"><ChevronLeft size={20} /></button><h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">공통 기초 교육</h2></div></div>
                     <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide p-1 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl w-full max-w-full">
                         <button onClick={() => setManualCategory('ALL')} className={`flex-shrink-0 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${manualCategory === 'ALL' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}>전체</button>
-                        {categories.map(cat => (<button key={cat.id} onClick={() => setManualCategory(cat.id)} className={`group relative flex items-center gap-1.5 flex-shrink-0 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${manualCategory === cat.id ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'}`}>{cat.label}<div className="w-0 overflow-hidden group-hover:w-auto flex items-center gap-1 transition-all duration-300 opacity-0 group-hover:opacity-100">
-                            <span onClick={(e) => handleEditCategory(e, cat)} className="p-1 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-zinc-400 hover:text-indigo-500 rounded transition-colors" title="수정"><Edit3 size={12} /></span>
-                            <span onClick={(e) => handleDeleteCategory(e, cat.id, cat.label)} className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/30 text-zinc-400 hover:text-rose-500 rounded transition-colors" title="삭제"><Trash2 size={12} /></span>
-                        </div></button>))}
+                        {categories.map(cat => (<button key={cat.id} onClick={() => setManualCategory(cat.id)} className={`group relative flex items-center gap-1.5 flex-shrink-0 px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${manualCategory === cat.id ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50'}`}>{cat.label}<div className="w-0 overflow-hidden group-hover:w-auto flex items-center gap-1 transition-all duration-300 opacity-0 group-hover:opacity-100"><span onClick={(e) => handleEditCategory(e, cat)} className="p-1 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-zinc-400 hover:text-indigo-500 rounded transition-colors" title="수정"><Edit3 size={12} /></span><span onClick={(e) => handleDeleteCategory(e, cat.id, cat.label)} className="p-1 hover:bg-rose-100 dark:hover:bg-rose-900/30 text-zinc-400 hover:text-rose-500 rounded transition-colors" title="삭제"><Trash2 size={12} /></span></div></button>))}
                         <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_CATEGORY', title: '카테고리 추가' })} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 transition-colors"><Plus size={14} /></button>
                     </div>
                 </div>
@@ -608,39 +475,18 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         );
     };
 
-    // [Part 5] 기초 교육 상세 뷰어 및 슬라이더
-
-    // --- 렌더러 3: 기초 교육 상세 (뷰어) ---
+    // --- 렌더러 3: 기초 교육 상세 ---
     const renderAttachmentButton = (attachments) => {
         if (!attachments || attachments.length === 0) return null;
         return (
             <div className="relative">
-                <button onClick={() => setShowFileList(!showFileList)} className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1.5 ${showFileList ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
-                    <FileText size={12} /> 첨부 양식 <span className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 rounded-full text-[9px] min-w-[16px] text-center">{attachments.length}</span>
-                </button>
+                <button onClick={() => setShowFileList(!showFileList)} className={`px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors flex items-center gap-1.5 ${showFileList ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}><FileText size={12} /> 첨부 양식 <span className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 rounded-full text-[9px] min-w-[16px] text-center">{attachments.length}</span></button>
                 {showFileList && (
                     <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowFileList(false)}></div>
                         <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-2 animate-fade-in-up origin-top-right">
-                            <div className="flex justify-between items-center px-2 mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-700/50">
-                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Attached Files</span>
-                                <div className="flex items-center gap-1">
-                                    <button onClick={handleAddFileToDetail} className="p-1 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors" title="파일 추가"><Plus size={12} /></button>
-                                    <button onClick={() => setShowFileList(false)} className="p-1 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded transition-colors"><X size={12} /></button>
-                                </div>
-                            </div>
-                            <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto pr-1 scrollbar-hide">
-                                {attachments.map((file, i) => (
-                                    <div key={i} onClick={() => handleOpenFile(file.path)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800/50">
-                                        <div className="p-1.5 bg-zinc-100 dark:bg-zinc-700 rounded text-zinc-500 group-hover:text-indigo-500 group-hover:bg-white dark:group-hover:bg-zinc-800 transition-colors"><FileText size={16} /></div>
-                                        <span className="text-xs font-medium text-zinc-700 dark:text-zinc-200 truncate flex-1 leading-tight">{file.name}</span>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={(e) => handleDeleteFileFromDetail(e, i)} className="p-1 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors" title="삭제"><Trash2 size={12} /></button>
-                                            <ExternalLink size={12} className="text-zinc-300 group-hover:text-indigo-400 transition-colors mr-1" />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <div className="flex justify-between items-center px-2 mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-700/50"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Attached Files</span><div className="flex items-center gap-1"><button onClick={handleAddFileToDetail} className="p-1 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors" title="파일 추가"><Plus size={12} /></button><button onClick={() => setShowFileList(false)} className="p-1 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded transition-colors"><X size={12} /></button></div></div>
+                            <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto pr-1 scrollbar-hide">{attachments.map((file, i) => (<div key={i} onClick={() => handleOpenFile(file.path)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer group transition-colors border border-transparent hover:border-indigo-100 dark:hover:border-indigo-800/50"><div className="p-1.5 bg-zinc-100 dark:bg-zinc-700 rounded text-zinc-500 group-hover:text-indigo-500 group-hover:bg-white dark:group-hover:bg-zinc-800 transition-colors"><FileText size={16} /></div><span className="text-xs font-medium text-zinc-700 dark:text-zinc-200 truncate flex-1 leading-tight">{file.name}</span><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => handleDeleteFileFromDetail(e, i)} className="p-1 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded transition-colors" title="삭제"><Trash2 size={12} /></button><Download size={12} className="text-zinc-300 group-hover:text-indigo-400 transition-colors mr-1" /></div></div>))}</div>
                         </div>
                     </>
                 )}
@@ -649,14 +495,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     };
 
     const renderStepSlider = (steps, nextChapter, navigateChapter) => {
-        if (!steps || steps.length === 0) {
-            return (
-                <div className="flex flex-col items-center justify-center text-zinc-400 gap-3 h-full">
-                    <div className="w-16 h-16 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center"><Image size={24} className="opacity-50" /></div>
-                    <p className="text-sm text-center">등록된 스텝이 없습니다.<br />우측 상단 '스텝 추가' 버튼을 눌러주세요.</p>
-                </div>
-            );
-        }
+        if (!steps || steps.length === 0) return <div className="flex flex-col items-center justify-center text-zinc-400 gap-3 h-full"><div className="w-16 h-16 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center"><Image size={24} className="opacity-50" /></div><p className="text-sm text-center">등록된 스텝이 없습니다.<br />우측 상단 '스텝 추가' 버튼을 눌러주세요.</p></div>;
         return (
             <div className="h-full transition-transform duration-500 ease-in-out" style={{ transform: `translateY(-${currentStepIndex * 100}%)` }}>
                 {steps.map((step, idx) => (
@@ -674,14 +513,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                         </div>
                     </div>
                 ))}
-                {nextChapter && (
-                    <div className="h-full w-full flex flex-col items-center justify-center p-8">
-                        <div onClick={() => navigateChapter(nextChapter.id)} className="group w-full max-w-[420px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-4 rounded-2xl shadow-lg hover:shadow-xl hover:border-indigo-500 hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform">🚀</div><div className="flex flex-col"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Next Chapter</span><h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-indigo-600 transition-colors">{nextChapter.title}</h3></div></div>
-                            <div className="flex items-center gap-1 text-xs font-bold text-zinc-400 group-hover:text-indigo-600 transition-colors bg-zinc-50 dark:bg-zinc-700/50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30">Start <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></div>
-                        </div>
-                    </div>
-                )}
+                {nextChapter && (<div className="h-full w-full flex flex-col items-center justify-center p-8"><div onClick={() => navigateChapter(nextChapter.id)} className="group w-full max-w-[420px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-4 rounded-2xl shadow-lg hover:shadow-xl hover:border-indigo-500 hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between gap-4"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform">🚀</div><div className="flex flex-col"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Next Chapter</span><h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-indigo-600 transition-colors">{nextChapter.title}</h3></div></div><div className="flex items-center gap-1 text-xs font-bold text-zinc-400 group-hover:text-indigo-600 transition-colors bg-zinc-50 dark:bg-zinc-700/50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30">Start <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></div></div></div>)}
             </div>
         );
     };
@@ -699,193 +531,72 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         const currentStep = steps[currentStepIndex];
         const attachments = item.attachments || [];
 
-        const navigateChapter = (chapterId) => {
-            if (!chapterId) return;
-            setActiveChapterId(chapterId);
-            setCurrentStepIndex(0);
-            const scrollContainer = document.getElementById('step-scroll-container');
-            if (scrollContainer) scrollContainer.scrollTop = 0;
-        };
-
-        const handleWheelScroll = (e) => {
-            const now = Date.now();
-            if (now - lastScrollTime.current < 500) return;
-            const maxIndex = nextChapter ? steps.length : steps.length - 1;
-            if (e.deltaY > 0) { if (currentStepIndex < maxIndex) { setCurrentStepIndex(prev => prev + 1); lastScrollTime.current = now; } }
-            else if (e.deltaY < 0) { if (currentStepIndex > 0) { setCurrentStepIndex(prev => prev - 1); lastScrollTime.current = now; } }
-        };
-
+        const navigateChapter = (chapterId) => { if (!chapterId) return; setActiveChapterId(chapterId); setCurrentStepIndex(0); const scrollContainer = document.getElementById('step-scroll-container'); if (scrollContainer) scrollContainer.scrollTop = 0; };
+        const handleWheelScroll = (e) => { const now = Date.now(); if (now - lastScrollTime.current < 500) return; const maxIndex = nextChapter ? steps.length : steps.length - 1; if (e.deltaY > 0) { if (currentStepIndex < maxIndex) { setCurrentStepIndex(prev => prev + 1); lastScrollTime.current = now; } } else if (e.deltaY < 0) { if (currentStepIndex > 0) { setCurrentStepIndex(prev => prev - 1); lastScrollTime.current = now; } } };
         const handleEditStepClick = () => { if (currentStep) setEditStepData(currentStep); };
 
         return (
             <div className="h-full flex flex-col animate-fade-in bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center px-4 bg-zinc-50/50 dark:bg-zinc-900/50 z-50 relative">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setIsTocOpen(!isTocOpen)} className={`p-2 rounded-lg transition-colors ${isTocOpen ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}><Menu size={18} /></button>
-                        <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
-                        <button onClick={() => setViewMode('BASIC_LIST')} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"><ChevronLeft size={18} /></button>
-                        <div className="flex flex-col ml-1"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">MANUAL</span><span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 leading-none">{item.title}</span></div>
-                    </div>
-                    <div className="flex gap-2">
-                        {renderAttachmentButton(attachments)}
-                        <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_BASIC_CHAPTER', title: '새 챕터 추가' })} className="px-3 py-1.5 text-xs font-bold border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"><Plus size={12} /> 챕터 추가</button>
-                    </div>
+                    <div className="flex items-center gap-3"><button onClick={() => setIsTocOpen(!isTocOpen)} className={`p-2 rounded-lg transition-colors ${isTocOpen ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}><Menu size={18} /></button><div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700 mx-1"></div><button onClick={() => setViewMode('BASIC_LIST')} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"><ChevronLeft size={18} /></button><div className="flex flex-col ml-1"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">MANUAL</span><span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 leading-none">{item.title}</span></div></div>
+                    <div className="flex gap-2">{renderAttachmentButton(attachments)}<button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_BASIC_CHAPTER', title: '새 챕터 추가' })} className="px-3 py-1.5 text-xs font-bold border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"><Plus size={12} /> 챕터 추가</button></div>
                 </div>
                 <div className="flex-1 flex overflow-hidden relative">
                     <div className={`flex-shrink-0 bg-zinc-50 dark:bg-zinc-900/50 border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-10 transition-all duration-300 ease-in-out overflow-hidden ${isTocOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 border-none'}`}>
-                        <div className="w-64 flex flex-col h-full">
-                            <div className="p-3 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">Table of Contents</div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                {(item.chapters || []).map((c, idx) => {
-                                    const isActive = activeChapter && activeChapter.id === c.id;
-                                    return (
-                                        <div key={c.id} className="flex flex-col">
-                                            <button onClick={() => { setActiveChapterId(c.id); setCurrentStepIndex(0); }} className={`w-full text-left p-3 rounded-xl transition-all flex items-center justify-between group ${isActive ? 'bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700' : 'hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 border border-transparent'}`}>
-                                                <div className="flex items-center gap-3 min-w-0"><span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive ? 'bg-indigo-600 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500'}`}>{idx + 1}</span><div className="min-w-0"><div className={`text-xs font-bold leading-tight truncate ${isActive ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}>{c.title}</div></div></div>
-                                                <div onClick={(e) => requestDelete(e, 'CHAPTER', c.id, c.title)} className={`p-1.5 rounded-md hover:bg-rose-100 dark:hover:bg-rose-900/30 text-zinc-300 hover:text-rose-500 transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Trash2 size={12} /></div>
-                                            </button>
-                                            {isActive && (c.steps || []).length > 0 && (
-                                                <div className="ml-4 pl-4 border-l-2 border-zinc-200 dark:border-zinc-800 mt-1 mb-1 space-y-0.5 animate-fade-in-down">
-                                                    {(c.steps || []).map((step, sIdx) => {
-                                                        const isStepActive = sIdx === currentStepIndex;
-                                                        return (<button key={step.id} onClick={() => setCurrentStepIndex(sIdx)} className={`w-full text-left py-2 px-2 rounded-lg text-[11px] transition-colors flex items-center gap-2 truncate ${isStepActive ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/20' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'}`}><div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStepActive ? 'bg-indigo-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div><span className="truncate">{step.title ? (step.title.length > 15 ? step.title.substring(0, 15) + '...' : step.title) : `Step ${sIdx + 1}`}</span></button>);
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                        <div className="w-64 flex flex-col h-full"><div className="p-3 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">Table of Contents</div><div className="flex-1 overflow-y-auto p-2 space-y-1">{(item.chapters || []).map((c, idx) => { const isActive = activeChapter && activeChapter.id === c.id; return (<div key={c.id} className="flex flex-col"><button onClick={() => { setActiveChapterId(c.id); setCurrentStepIndex(0); }} className={`w-full text-left p-3 rounded-xl transition-all flex items-center justify-between group ${isActive ? 'bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700' : 'hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 border border-transparent'}`}><div className="flex items-center gap-3 min-w-0"><span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive ? 'bg-indigo-600 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500'}`}>{idx + 1}</span><div className="min-w-0"><div className={`text-xs font-bold leading-tight truncate ${isActive ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}>{c.title}</div></div></div><div onClick={(e) => requestDelete(e, 'CHAPTER', c.id, c.title)} className={`p-1.5 rounded-md hover:bg-rose-100 dark:hover:bg-rose-900/30 text-zinc-300 hover:text-rose-500 transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}><Trash2 size={12} /></div></button>{isActive && (c.steps || []).length > 0 && (<div className="ml-4 pl-4 border-l-2 border-zinc-200 dark:border-zinc-800 mt-1 mb-1 space-y-0.5 animate-fade-in-down">{(c.steps || []).map((step, sIdx) => { const isStepActive = sIdx === currentStepIndex; return (<button key={step.id} onClick={() => setCurrentStepIndex(sIdx)} className={`w-full text-left py-2 px-2 rounded-lg text-[11px] transition-colors flex items-center gap-2 truncate ${isStepActive ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/20' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'}`}><div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStepActive ? 'bg-indigo-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div><span className="truncate">{step.title ? (step.title.length > 15 ? step.title.substring(0, 15) + '...' : step.title) : `Step ${sIdx + 1}`}</span></button>); })}</div>)}</div>); })}</div></div>
                     </div>
                     <div className="flex-1 flex flex-col bg-zinc-100 dark:bg-zinc-950 relative overflow-hidden transition-all duration-300">
                         {activeChapter ? (
                             <>
-                                <div className="p-4 border-b border-zinc-200/50 dark:border-zinc-800 flex justify-between items-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur absolute top-0 left-0 right-0 z-20">
-                                    <div className="flex items-center gap-3">
-                                        <button onClick={() => navigateChapter(prevChapter?.id)} disabled={!prevChapter} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"><ChevronLeft size={20} /></button>
-                                        <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><BookOpen size={18} className="text-indigo-500" /><span className="truncate max-w-[400px]">{activeChapter.title}</span></h3>
-                                        <button onClick={() => navigateChapter(nextChapter?.id)} disabled={!nextChapter} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"><ChevronRight size={20} /></button>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {steps.length > 0 && currentStep && (<button onClick={handleEditStepClick} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-200 text-zinc-500 hover:text-amber-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"><Edit3 size={14} /> 수정</button>)}
-                                        {steps.length > 0 && currentStep && (<button onClick={(e) => requestDelete(e, 'STEP', currentStep.id, currentStep.title || '현재 스텝')} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:border-rose-200 text-zinc-500 hover:text-rose-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"><Trash2 size={14} /> 삭제</button>)}
-                                        <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_MANUAL_STEP', title: '설명 단계 추가' })} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"><Image size={14} /> 스텝 추가</button>
-                                    </div>
-                                </div>
-                                <div id="step-scroll-container" onWheel={handleWheelScroll} className="flex-1 relative overflow-hidden">
-                                    {renderStepSlider(steps, nextChapter, navigateChapter)}
-                                    {steps.length > 0 && (<div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">{steps.map((_, idx) => (<div key={idx} onClick={() => setCurrentStepIndex(idx)} className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer hover:scale-125 ${idx === currentStepIndex ? 'bg-indigo-600 h-6' : 'bg-zinc-300 dark:bg-zinc-700'}`} />))}{nextChapter && (<div onClick={() => setCurrentStepIndex(steps.length)} className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer hover:scale-125 mt-2 ${currentStepIndex === steps.length ? 'bg-indigo-600 h-6' : 'bg-zinc-300 dark:bg-zinc-700 border border-indigo-500'}`} title="다음 챕터" />)}</div>)}
-                                </div>
+                                <div className="p-4 border-b border-zinc-200/50 dark:border-zinc-800 flex justify-between items-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur absolute top-0 left-0 right-0 z-20"><div className="flex items-center gap-3"><button onClick={() => navigateChapter(prevChapter?.id)} disabled={!prevChapter} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"><ChevronLeft size={20} /></button><h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><BookOpen size={18} className="text-indigo-500" /><span className="truncate max-w-[400px]">{activeChapter.title}</span></h3><button onClick={() => navigateChapter(nextChapter?.id)} disabled={!nextChapter} className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"><ChevronRight size={20} /></button></div><div className="flex gap-2">{steps.length > 0 && currentStep && (<button onClick={handleEditStepClick} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-200 text-zinc-500 hover:text-amber-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"><Edit3 size={14} /> 수정</button>)}{steps.length > 0 && currentStep && (<button onClick={(e) => requestDelete(e, 'STEP', currentStep.id, currentStep.title || '현재 스텝')} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:border-rose-200 text-zinc-500 hover:text-rose-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"><Trash2 size={14} /> 삭제</button>)}<button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_MANUAL_STEP', title: '설명 단계 추가' })} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"><Image size={14} /> 스텝 추가</button></div></div>
+                                <div id="step-scroll-container" onWheel={handleWheelScroll} className="flex-1 relative overflow-hidden">{renderStepSlider(steps, nextChapter, navigateChapter)}{steps.length > 0 && (<div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">{steps.map((_, idx) => (<div key={idx} onClick={() => setCurrentStepIndex(idx)} className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer hover:scale-125 ${idx === currentStepIndex ? 'bg-indigo-600 h-6' : 'bg-zinc-300 dark:bg-zinc-700'}`} />))}{nextChapter && (<div onClick={() => setCurrentStepIndex(steps.length)} className={`w-2 h-2 rounded-full transition-all duration-300 cursor-pointer hover:scale-125 mt-2 ${currentStepIndex === steps.length ? 'bg-indigo-600 h-6' : 'bg-zinc-300 dark:bg-zinc-700 border border-indigo-500'}`} title="다음 챕터" />)}</div>)}</div>
                             </>
-                        ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 gap-4">
-                                <BookOpen size={48} className="opacity-20" />
-                                <p className="text-sm">좌측 목록에서 챕터를 선택하면<br />상세 내용이 표시됩니다.</p>
-                            </div>
-                        )}
+                        ) : (<div className="flex-1 flex flex-col items-center justify-center text-zinc-400 gap-4"><BookOpen size={48} className="opacity-20" /><p className="text-sm">좌측 목록에서 챕터를 선택하면<br />상세 내용이 표시됩니다.</p></div>)}
                     </div>
                 </div>
             </div>
         );
     };
 
-    // [Part 6] 설비 마스터 렌더링 및 최종 Export
-
-    // --- 렌더러 4: 설비 목록 화면 (Split Layout) ---
+    // --- 렌더러 4: 설비 목록 화면 ---
     const renderEquipList = () => {
         const activeTab = equipTab === 'SYSTEM' ? 'SYSTEM' : 'FIELD';
         const equipList = equipment.list || [];
         const fieldGuides = equipment.fieldGuides || [];
 
         return (
-            <div className="h-full flex flex-col bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 animate-fade-in relative">
+            <div className="h-full flex flex-col bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm animate-fade-in relative overflow-hidden">
                 <div className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setViewMode('HOME')} className="hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 rounded text-zinc-500"><ChevronLeft size={20} /></button>
-                        <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">설비 마스터</h2>
-                    </div>
+                    <div className="flex items-center gap-3"><button onClick={() => setViewMode('HOME')} className="hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 rounded text-zinc-500"><ChevronLeft size={20} /></button><h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">설비 마스터</h2></div>
                 </div>
                 <div className="flex-1 flex overflow-hidden">
                     <div className="w-56 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 py-4 flex flex-col gap-1">
-                        <div className="px-3">
-                            <div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">현장 업무 (Field)</div>
-                            <button onClick={() => setEquipTab('FIELD')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'FIELD' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>트러블 슈팅 / 기기 조작</button>
-                        </div>
-                        <div className="px-3 mt-4">
-                            <div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">설비 관리 (System)</div>
-                            <button onClick={() => setEquipTab('SYSTEM')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'SYSTEM' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>전체 설비 계통도</button>
-                        </div>
+                        <div className="px-3"><div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">현장 업무 (Field)</div><button onClick={() => setEquipTab('FIELD')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'FIELD' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>트러블 슈팅 / 기기 조작</button></div>
+                        <div className="px-3 mt-4"><div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">설비 관리 (System)</div><button onClick={() => setEquipTab('SYSTEM')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'SYSTEM' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>전체 설비 계통도</button></div>
                     </div>
                     <div className="flex-1 bg-white dark:bg-zinc-900 overflow-y-auto p-8">
                         {activeTab === 'FIELD' && (
                             <div className="max-w-4xl mx-auto space-y-10">
+                                {/* 현장 기기 조작법 */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                        <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-rose-500"></div>고장 조치 매뉴얼 (Troubleshooting)</h3>
-                                        <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_GUIDE', title: '고장 조치 매뉴얼 등록' })} className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 border border-zinc-200 px-2 py-1 rounded bg-white hover:bg-zinc-50"><Plus size={12} /> 등록</button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {fieldGuides.filter(g => g.type === 'TROUBLE').map(g => (
-                                            <div key={g.id} onClick={() => { setActiveFieldGuideId(g.id); setCurrentStepId(null); setViewMode('FIELD_DETAIL'); }} className="group p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm cursor-pointer bg-white dark:bg-zinc-800 transition-all hover:-translate-y-0.5">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">{g.title}</h4>
-                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={(e) => handleEditFieldGuide(e, g)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-indigo-500"><Edit3 size={12} /></button>
-                                                        <button onClick={(e) => handleDeleteFieldGuide(e, g.id)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-rose-500"><Trash2 size={12} /></button>
-                                                    </div>
-                                                </div>
-                                                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{g.desc}</p>
-                                                <div className="mt-2 flex gap-1"><span className="text-[10px] bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-bold">긴급</span>{g.steps && g.steps.length > 0 && <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 px-1.5 py-0.5 rounded">{g.steps.length}단계</span>}</div>
-                                            </div>
-                                        ))}
-                                        {fieldGuides.filter(g => g.type === 'TROUBLE').length === 0 && <div className="col-span-2 text-center py-8 text-zinc-400 text-xs">등록된 매뉴얼이 없습니다.</div>}
-                                    </div>
+                                    <div className="flex items-center justify-between mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2"><h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-emerald-500"></div>현장 기기 조작법 (Operation)</h3><button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_GUIDE', title: '기기 조작법 등록' })} className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 border border-zinc-200 px-2 py-1 rounded bg-white hover:bg-zinc-50"><Plus size={12} /> 등록</button></div>
+                                    <div className="grid grid-cols-2 gap-3">{fieldGuides.filter(g => g.type === 'OPERATION').map(g => (<div key={g.id} onClick={() => { setActiveFieldGuideId(g.id); setCurrentStepId(null); setIsDetailPanelOpen(false); setViewMode('FIELD_DETAIL'); }} className="group p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm cursor-pointer bg-white dark:bg-zinc-800 transition-all hover:-translate-y-0.5"><div className="flex justify-between items-start mb-1"><h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">{g.title}</h4><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => handleEditFieldGuide(e, g)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-indigo-500"><Edit3 size={12} /></button><button onClick={(e) => handleDeleteFieldGuide(e, g.id)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-rose-500"><Trash2 size={12} /></button></div></div>
+                                    {/* 🟢 [수정됨] 설명 텍스트를 두 줄까지 표시 */}
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed h-8">{g.desc}</p>
+                                    <div className="mt-2 flex gap-1"><span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-bold">Standard</span>{g.steps && g.steps.length > 0 && <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 px-1.5 py-0.5 rounded">{g.steps.length}단계</span>}</div></div>))}</div>
                                 </div>
+                                {/* 고장 조치 매뉴얼 */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                        <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-emerald-500"></div>현장 기기 조작법 (Operation)</h3>
-                                        <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_GUIDE', title: '기기 조작법 등록' })} className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 border border-zinc-200 px-2 py-1 rounded bg-white hover:bg-zinc-50"><Plus size={12} /> 등록</button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {fieldGuides.filter(g => g.type === 'OPERATION').map(g => (
-                                            <div key={g.id} onClick={() => setGuideDetailModal({ isOpen: true, guide: g })} className="group p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm cursor-pointer bg-white dark:bg-zinc-800 transition-all hover:-translate-y-0.5">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">{g.title}</h4>
-                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={(e) => handleEditFieldGuide(e, g)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-indigo-500"><Edit3 size={12} /></button>
-                                                        <button onClick={(e) => handleDeleteFieldGuide(e, g.id)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-rose-500"><Trash2 size={12} /></button>
-                                                    </div>
-                                                </div>
-                                                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{g.desc}</p>
-                                                <div className="mt-2 flex gap-1"><span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-bold">Standard</span>{g.steps && g.steps.length > 0 && <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 px-1.5 py-0.5 rounded">{g.steps.length}단계</span>}</div>
-                                            </div>
-                                        ))}
-                                        {fieldGuides.filter(g => g.type === 'OPERATION').length === 0 && <div className="col-span-2 text-center py-8 text-zinc-400 text-xs">등록된 조작법이 없습니다.</div>}
-                                    </div>
+                                    <div className="flex items-center justify-between mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2"><h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-rose-500"></div>고장 조치 매뉴얼 (Troubleshooting)</h3><button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_GUIDE', title: '고장 조치 매뉴얼 등록' })} className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 border border-zinc-200 px-2 py-1 rounded bg-white hover:bg-zinc-50"><Plus size={12} /> 등록</button></div>
+                                    <div className="grid grid-cols-2 gap-3">{fieldGuides.filter(g => g.type === 'TROUBLE').map(g => (<div key={g.id} onClick={() => { setActiveFieldGuideId(g.id); setCurrentStepId(null); setIsDetailPanelOpen(false); setViewMode('FIELD_DETAIL'); }} className="group p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm cursor-pointer bg-white dark:bg-zinc-800 transition-all hover:-translate-y-0.5"><div className="flex justify-between items-start mb-1"><h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">{g.title}</h4><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => handleEditFieldGuide(e, g)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-indigo-500"><Edit3 size={12} /></button><button onClick={(e) => handleDeleteFieldGuide(e, g.id)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-rose-500"><Trash2 size={12} /></button></div></div>
+                                    {/* 🟢 [수정됨] 설명 텍스트를 두 줄까지 표시 */}
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed h-8">{g.desc}</p>
+                                    <div className="mt-2 flex gap-1"><span className="text-[10px] bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-bold">긴급</span>{g.steps && g.steps.length > 0 && <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 px-1.5 py-0.5 rounded">{g.steps.length}단계</span>}</div></div>))}</div>
                                 </div>
                             </div>
                         )}
                         {activeTab === 'SYSTEM' && (
-                            <div className="max-w-4xl mx-auto">
-                                <div className="flex items-center justify-between mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                    <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-indigo-500"></div>전체 설비 계통 목록</h3>
-                                    <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_EQUIPMENT', title: '설비 등록' })} className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"><Plus size={12} /> 설비 등록</button>
-                                </div>
-                                {equipList.length === 0 ? (
-                                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50"><p className="text-sm text-zinc-500">등록된 설비가 없습니다.</p></div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {equipList.map(equip => (
-                                            <div key={equip.id} onClick={() => { setActiveEquipId(equip.id); setActiveEquipChapterId(null); setViewMode('EQUIP_DETAIL'); }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-lg hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group">
-                                                <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{equip.meta?.code || 'EQ-000'}</span></div>
-                                                <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate mb-1 group-hover:text-amber-600 transition-colors">{equip.title}</h4>
-                                                <p className="text-xs text-zinc-500 line-clamp-2 h-8 leading-relaxed">{equip.desc}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <div className="max-w-4xl mx-auto"><div className="flex items-center justify-between mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-2"><h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-indigo-500"></div>전체 설비 계통 목록</h3><button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_EQUIPMENT', title: '설비 등록' })} className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"><Plus size={12} /> 설비 등록</button></div>{equipList.length === 0 ? (<div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50"><p className="text-sm text-zinc-500">등록된 설비가 없습니다.</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{equipList.map(equip => (<div key={equip.id} onClick={() => { setActiveEquipId(equip.id); setActiveEquipChapterId(null); setViewMode('EQUIP_DETAIL'); }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-lg hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"><div className="flex justify-between items-start mb-2"><span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{equip.meta?.code || 'EQ-000'}</span></div><h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate mb-1 group-hover:text-amber-600 transition-colors">{equip.title}</h4><p className="text-xs text-zinc-500 line-clamp-2 h-8 leading-relaxed">{equip.desc}</p></div>))}</div>)}</div>
                         )}
                     </div>
                 </div>
@@ -903,7 +614,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         const isTrouble = guide.type === 'TROUBLE';
 
         return (
-            <div className="h-full flex flex-col animate-fade-in bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+            <div className="h-full flex flex-col animate-fade-in bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm relative">
                 <div className={`h-14 border-b flex justify-between items-center px-4 flex-shrink-0 z-20 ${isTrouble ? 'bg-rose-50/50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30' : 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-900/30'}`}>
                     <div className="flex items-center gap-3">
                         <button onClick={() => setViewMode('EQUIP_LIST')} className="p-1.5 hover:bg-black/5 rounded-lg text-zinc-500"><ChevronLeft size={20} /></button>
@@ -912,9 +623,9 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                             <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{guide.title}</span>
                         </div>
                     </div>
-                    <div className="flex gap-2"><button onClick={(e) => handleEditFieldGuide(e, guide)} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-zinc-500 hover:bg-zinc-50 flex items-center gap-1"><Edit3 size={12} /> 가이드 수정</button></div>
+                    <div className="flex gap-2"><button onClick={(e) => handleEditFieldGuide(e, guide)} className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-zinc-500 hover:bg-zinc-50 flex items-center gap-1"><Edit3 size={12} /> 정보 수정</button></div>
                 </div>
-                <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex overflow-hidden relative">
                     <div className="w-64 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col">
                         <div className="p-3 text-[10px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-200 dark:border-zinc-800">Process Steps</div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -922,26 +633,64 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                             {steps.map((step, idx) => {
                                 const isActive = activeStep && activeStep.id === step.id;
                                 return (
-                                    <div key={step.id || idx} onClick={() => setCurrentStepId(step.id)} className={`group w-full text-left p-3 rounded-xl transition-all flex items-start gap-3 cursor-pointer ${isActive ? 'bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700' : 'hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 border border-transparent'}`}>
+                                    <div key={step.id || idx} onClick={() => { setCurrentStepId(step.id); setIsDetailPanelOpen(true); }} className={`group w-full text-left p-3 rounded-xl transition-all flex items-start gap-3 cursor-pointer ${isActive ? 'bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700' : 'hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 border border-transparent'}`}>
                                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${isActive ? (isTrouble ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white') : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500'}`}>{idx + 1}</div>
-                                        <div className="min-w-0 flex-1"><div className={`text-xs font-bold leading-tight ${isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}>{step.title || step.text}</div></div>
+                                        <div className="min-w-0 flex-1">
+                                            {/* 🟢 [수정됨] 단계 이름을 진하게, 내용을 연하게 표시 */}
+                                            <div className={`text-xs font-bold ${isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'} mb-0.5`}>{step.title || `Step ${idx + 1}`}</div>
+                                            <div className={`text-[10px] leading-tight line-clamp-2 ${isActive ? 'text-zinc-600 dark:text-zinc-300' : 'text-zinc-500 dark:text-zinc-400'}`}>{step.content || "내용 없음"}</div>
+                                        </div>
                                     </div>
                                 );
                             })}
+                            
+                            {/* 🟢 [추가됨] 단계 추가 버튼 (목록 하단) */}
+                            <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_STEP', title: '작업 단계 추가' })} className="w-full py-3 border border-dashed border-zinc-300 rounded-xl text-xs font-bold text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50/50 flex justify-center gap-2 mt-2 transition-all"><Plus size={14} /> 단계 추가</button>
                         </div>
                     </div>
                     <div className="flex-1 bg-zinc-100 dark:bg-zinc-950 relative overflow-hidden flex flex-col">
                         {activeStep && activeStep.image ? (<PanZoomViewer src={activeStep.image} alt="도면 확인" />) : (<div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-2"><Image size={48} className="opacity-20" /><p className="text-sm">등록된 도면/사진이 없습니다.</p></div>)}
+                        
+                        {/* 🟢 [추가됨] 우측 슬라이드 패널 토글 버튼 (화면 우측 중앙) */}
+                        <button 
+                            onClick={() => setIsDetailPanelOpen(!isDetailPanelOpen)}
+                            className="absolute right-0 top-1/2 -translate-y-1/2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-l-lg p-1 shadow-md z-30 hover:bg-zinc-50 transition-colors"
+                            title={isDetailPanelOpen ? "상세 정보 닫기" : "상세 정보 열기"}
+                        >
+                            {isDetailPanelOpen ? <PanelRightClose size={16} className="text-zinc-500" /> : <PanelRightOpen size={16} className="text-zinc-500" />}
+                        </button>
                     </div>
-                    <div className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-20">
-                        <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isTrouble ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>{activeStep ? `STEP ${steps.indexOf(activeStep) + 1}` : 'INFO'}</span>
-                            <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 leading-tight mt-2 mb-2">{activeStep ? (activeStep.title || activeStep.text) : "단계를 선택하세요"}</h3>
+
+                    {/* 🟢 [수정됨] 우측 상세 패널 (슬라이드 방식) */}
+                    <div className={`absolute top-0 right-0 h-full w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-20 transition-transform duration-300 ease-in-out shadow-xl ${isDetailPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                        <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start">
+                            <div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isTrouble ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>{activeStep ? `STEP ${steps.indexOf(activeStep) + 1}` : 'INFO'}</span>
+                                <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 leading-tight mt-2 mb-2">{activeStep ? (activeStep.title || activeStep.text) : "단계를 선택하세요"}</h3>
+                            </div>
+                            <button onClick={() => setIsDetailPanelOpen(false)} className="p-1 hover:bg-zinc-100 rounded text-zinc-400"><X size={16}/></button>
                         </div>
                         <div className="flex-1 p-5 overflow-y-auto">
                             <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap">{activeStep ? (activeStep.content || activeStep.text) : "좌측 목록에서 작업 단계를 선택하여 상세 내용을 확인하십시오."}</p>
                             {isTrouble && (<div className="mt-6 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-xl p-3 flex gap-2"><AlertTriangle className="text-rose-500 flex-shrink-0" size={16} /><div><h4 className="text-xs font-bold text-rose-700 dark:text-rose-300">안전 주의</h4><p className="text-[11px] text-rose-600/80 mt-1">반드시 전원 차단 여부를 확인 후 작업하십시오.</p></div></div>)}
                         </div>
+                        
+                        {/* 첨부파일 표시 영역 */}
+                        {guide.attachments && guide.attachments.length > 0 && (
+                            <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800">
+                                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Attached Documents</h4>
+                                <div className="space-y-1">
+                                    {guide.attachments.map((file, i) => (
+                                        <div key={i} onClick={() => handleOpenFile(file.path)} className="flex items-center gap-2 p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg cursor-pointer hover:border-indigo-300 transition-colors">
+                                            <FileText size={14} className="text-indigo-500" />
+                                            <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate flex-1">{file.name}</span>
+                                            <Download size={12} className="text-zinc-400" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50">
                             <button className={`w-full py-3 rounded-xl text-sm font-bold shadow-sm text-white ${isTrouble ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>확인 및 다음 단계</button>
                         </div>
@@ -1029,7 +778,23 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                         </div>
                     </div>
                 </div>
-                {logModal.isOpen && (<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"><div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl p-6 shadow-xl"><h3 className="font-bold mb-4">정비 이력 추가</h3><textarea value={logModal.content} onChange={e => setLogModal({ ...logModal, content: e.target.value })} className="w-full h-24 border rounded-xl p-3 text-sm resize-none mb-4 outline-none focus:ring-2 focus:ring-amber-500" placeholder="내용을 입력하세요..." /><div className="flex gap-2"><button onClick={() => setLogModal({ isOpen: false, content: '' })} className="flex-1 py-2 rounded-lg border text-sm font-bold">취소</button><button onClick={handleAddLog} className="flex-1 py-2 rounded-lg bg-amber-500 text-white text-sm font-bold">저장</button></div></div></div>)}
+                {logModal.isOpen && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                        <div className="bg-white dark:bg-zinc-900 w-full max-w-sm mx-4 rounded-2xl p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                            <h3 className="font-bold mb-4 text-zinc-800 dark:text-zinc-100">정비 이력 추가</h3>
+                            <textarea
+                                value={logModal.content}
+                                onChange={e => setLogModal({ ...logModal, content: e.target.value })}
+                                className="w-full h-24 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm resize-none mb-4 outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400"
+                                placeholder="내용을 입력하세요..."
+                            />
+                            <div className="flex gap-2">
+                                <button onClick={() => setLogModal({ isOpen: false, content: '' })} className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">취소</button>
+                                <button onClick={handleAddLog} className="flex-1 py-2 rounded-lg bg-amber-500 text-white text-sm font-bold hover:bg-amber-600">저장</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -1047,7 +812,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             {/* 통합 알림/확인 다이얼로그 */}
             {dialogConfig.isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4" onClick={() => dialogConfig.type === 'alert' && closeDialog()}>
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-xs rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col items-center text-center animate-scale-up" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-xs mx-4 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col items-center text-center animate-scale-up" onClick={e => e.stopPropagation()}>
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${dialogConfig.type === 'confirm' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-500'}`}>{dialogConfig.type === 'confirm' ? <AlertTriangle size={24} /> : <div className="text-2xl">💡</div>}</div>
                         <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-2">{dialogConfig.type === 'confirm' ? '확인 필요' : '알림'}</h3>
                         <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed whitespace-pre-wrap">{dialogConfig.message}</p>
@@ -1062,7 +827,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             {/* 통합 입력 모달 */}
             {modalConfig.isOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 transform scale-100 transition-all">
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg mx-4 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 transform scale-100 transition-all">
                         <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-6 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4">
                             {modalConfig.type.includes('EDIT') ? <Edit3 size={18} className="text-amber-500" /> : <Plus size={18} className="text-indigo-500" />} {modalConfig.title}
                         </h3>
@@ -1088,13 +853,27 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                                     </div>
                                 </>
                             )}
-                            {modalConfig.type === 'ADD_MANUAL_STEP' && (
+                            {(modalConfig.type === 'ADD_MANUAL_STEP' || modalConfig.type === 'ADD_FIELD_STEP') && (
                                 <>
                                     <div>
                                         <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">스텝 이미지</label>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-400 truncate flex items-center gap-2"><Image size={16} /> {newStepForm.imagePath ? newStepForm.imagePath.split(/[/\\]/).pop() : "이미지를 선택하세요"}</div>
-                                            <button onClick={() => handleSelectImage('step')} className="px-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-indigo-600 dark:text-indigo-400 font-bold">찾기</button>
+                                        <div 
+                                            onClick={() => handleSelectImage('step')}
+                                            className="w-full h-24 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/10 transition-all group"
+                                        >
+                                            {newStepForm.imagePath ? (
+                                                <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                                                    <Image size={20} />
+                                                    <span className="text-sm font-bold">이미지가 선택되었습니다</span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                                                        <Upload size={20} />
+                                                    </div>
+                                                    <span className="text-xs font-bold text-zinc-500 group-hover:text-indigo-500 transition-colors">클릭하여 이미지 업로드</span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                     <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">스텝 제목</label><input value={newStepForm.title} onChange={e => setNewStepForm({ ...newStepForm, title: e.target.value })} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400" placeholder="제목 입력" /></div>
@@ -1105,32 +884,11 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                                 <>
                                     <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">제목</label><input autoFocus value={inputTitle} onChange={e => setInputTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400" placeholder="제목 입력" /></div>
 
-                                    {(modalConfig.type === 'ADD_FIELD_GUIDE' || modalConfig.type === 'EDIT_FIELD_GUIDE') ? (
-                                        <div>
-                                            <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">상세 단계 입력 (Dynamic Steps)</label>
-                                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 scrollbar-hide mb-2">
-                                                {inputSteps.map((step, idx) => (
-                                                    <div key={idx} className="flex gap-2 items-center">
-                                                        <span className="text-xs text-zinc-400 w-4 text-center">{idx + 1}</span>
-                                                        <input
-                                                            value={step.text}
-                                                            onChange={(e) => handleStepChange(idx, e.target.value)}
-                                                            className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                                            placeholder={`단계 ${idx + 1} 내용 입력`}
-                                                        />
-                                                        <button onClick={() => removeInputStep(idx)} className="p-1.5 text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"><Trash2 size={14} /></button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <button onClick={addInputStep} className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center gap-1"><Plus size={12} /> 단계 추가</button>
-                                        </div>
-                                    ) : (
-                                        modalConfig.type !== 'ADD_EQUIP_DOC' && (
-                                            <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">설명</label><textarea value={inputDesc} onChange={e => setInputDesc(e.target.value)} className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400 resize-none" placeholder="설명 입력" /></div>
-                                        )
+                                    {modalConfig.type !== 'ADD_EQUIP_DOC' && (
+                                        <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">설명</label><textarea value={inputDesc} onChange={e => setInputDesc(e.target.value)} className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-zinc-400 resize-none" placeholder="설명 입력" /></div>
                                     )}
 
-                                    {(modalConfig.type.includes('MANUAL') || modalConfig.type === 'ADD_EQUIP_DOC') && (
+                                    {(modalConfig.type.includes('MANUAL') || modalConfig.type === 'ADD_EQUIP_DOC' || modalConfig.type.includes('FIELD_GUIDE')) && (
                                         <div>
                                             <div className="flex justify-between items-center mb-1.5"><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400">관련 서식/파일 첨부</label></div>
                                             <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDropFile} onClick={() => handleSelectFile('attachment')} className={`w-full border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all mb-2 ${isDragging ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' : 'border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}>
@@ -1166,7 +924,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             {/* 스텝 수정 모달 */}
             {editStepData && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 transform scale-100 transition-all">
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg mx-4 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 transform scale-100 transition-all">
                         <h3 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-6 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4">
                             <Edit3 size={18} className="text-amber-500" /> 스텝 수정: {editStepData.title || 'Step'}
                         </h3>
@@ -1174,13 +932,21 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                             <div>
                                 <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">스텝 이미지</label>
                                 <div className="flex gap-2">
-                                    <div className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-400 truncate flex items-center gap-2"><Image size={16} /> {editStepData.image ? '업로드됨' : "이미지 선택"}</div>
+                                    <div className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-400 truncate flex items-center gap-2">
+                                        <Image size={16} /> {editStepData.image ? '업로드됨' : "이미지 선택"}
+                                    </div>
                                     <button onClick={() => setEditStepData(Object.assign({}, editStepData, { image: null }))} className="px-3 bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-800 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors text-rose-600 dark:text-rose-400 font-bold">삭제</button>
                                     <button onClick={() => handleSelectImage('edit', editStepData.id)} className="px-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors text-indigo-600 dark:text-indigo-400 font-bold">변경</button>
                                 </div>
                             </div>
-                            <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">스텝 제목</label><input value={editStepData.title || ''} onChange={(e) => setEditStepData(Object.assign({}, editStepData, { title: e.target.value }))} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-zinc-400" placeholder="제목 입력" /></div>
-                            <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">상세 내용</label><textarea value={editStepData.content || ''} onChange={(e) => setEditStepData(Object.assign({}, editStepData, { content: e.target.value }))} className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500 resize-none placeholder:text-zinc-400" placeholder="내용 입력..." /></div>
+                            <div>
+                                <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">스텝 제목</label>
+                                <input value={editStepData.title || ''} onChange={(e) => setEditStepData(Object.assign({}, editStepData, { title: e.target.value }))} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-zinc-400" placeholder="제목 입력" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5">상세 내용</label>
+                                <textarea value={editStepData.content || ''} onChange={(e) => setEditStepData(Object.assign({}, editStepData, { content: e.target.value }))} className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500 resize-none placeholder:text-zinc-400" placeholder="내용 입력..." />
+                            </div>
                         </div>
                         <div className="flex gap-3 mt-8">
                             <button onClick={() => setEditStepData(null)} className="flex-1 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">취소</button>
@@ -1188,22 +954,6 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* 🟢 Guide Detail Modal (현장 가이드 상세 뷰어 - 슬라이드 패널) */}
-            {guideDetailModal.isOpen && (
-                <GuideDetailPanel
-                    guide={guideDetailModal.guide}
-                    onClose={() => setGuideDetailModal({ isOpen: false, guide: null })}
-                    onEdit={(guide) => {
-                        setGuideDetailModal({ isOpen: false, guide: null }); // 패널 닫고
-                        handleEditFieldGuide({ stopPropagation: () => { } }, guide); // 수정 모달 열기
-                    }}
-                    onDelete={(id) => {
-                        setGuideDetailModal({ isOpen: false, guide: null }); // 패널 닫고
-                        handleDeleteFieldGuide({ stopPropagation: () => { } }, id); // 삭제 다이얼로그
-                    }}
-                />
             )}
         </div>
     );
