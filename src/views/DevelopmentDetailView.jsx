@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-15 22:45:33
+﻿// Last Updated: 2025-12-16 04:18:05
 // [Part 1] 파일 상단: 임포트 및 InputModal
 import React, { useState, useEffect, useRef } from 'react';
 import {
