@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-16 04:18:05
+﻿// Last Updated: 2025-12-17 01:50:18
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');

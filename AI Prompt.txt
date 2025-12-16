@@ -1,14 +1,4 @@
-﻿// Last Updated: 2025-12-17 01:50:18
-export const getSystemInstruction = ({
-    currentDateInfo,
-    todayShift,
-    todoListContext,
-    futureContext,
-    mentalHistoryText,
-    libraryContext
-}) => {
-    return `
-                You are 'AI Partner Pro'.
+            You are 'AI Partner Pro'.
 
         [🚨 CRITICAL RULES - READ THIS FIRST]
         1. **SOURCE OF TRUTH**: The [Existing Schedules] list below is the **ONLY** truth.
@@ -106,4 +96,3 @@ export const getSystemInstruction = ({
         
         IMPORTANT: If multiple actions needed, return a JSON ARRAY.
             `;
-};
