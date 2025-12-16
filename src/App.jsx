@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 03:03:57
+﻿// Last Updated: 2025-12-17 03:30:09
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -106,6 +106,61 @@ function App() {
     const handleImportData = () => { alert("데이터 복원 기능은 준비 중입니다."); };
     const handleResetData = () => { if (confirm("정말 초기화하시겠습니까?")) { ipcRenderer.send('reset-all-data'); window.location.reload(); } };
 
+    const [notifiedLog, setNotifiedLog] = useState(new Set());
+
+    // 🟢 [추가] 1분마다 일정을 체크하여 시스템 알림 보내기
+    useEffect(() => {
+        const checkNotifications = () => {
+            const now = new Date();
+            
+            todos.forEach(todo => {
+                // 날짜나 시간이 없는 일정은 패스
+                if (!todo.date || !todo.startTime) return;
+
+                // 일정 시간 파싱 (YYYY-MM-DD + HH:MM)
+                const targetDate = new Date(`${todo.date}T${todo.startTime}:00`);
+                
+                // 시간 차이 계산 (밀리초 -> 분)
+                const diffMs = targetDate - now;
+                const diffMins = Math.floor(diffMs / 1000 / 60);
+
+                // 알림 조건: 30분 전 또는 15분 전
+                // (diffMins가 정확히 30이 아닐 수 있으므로 29~30 사이로 체크)
+                const is30MinBefore = diffMins === 30;
+                const is15MinBefore = diffMins === 15;
+                const is10MinBefore = diffMins === 10; // 10분 전도 추가해둠
+                
+                // 알림 식별자 (ID + 시간)
+                const notificationKey = `${todo.id}-${diffMins}`;
+
+                if ((is30MinBefore || is15MinBefore || is10MinBefore) && !notifiedLog.has(notificationKey)) {
+                    
+                    // 🔔 시스템 알림 발생!
+                    const noti = new Notification('일정 알림 ⏰', {
+                        body: `${diffMins}분 뒤에 [${todo.category === 'work' ? '업무' : '일정'}] "${todo.text}" 일정이 있습니다.`,
+                        silent: false // 소리 켬
+                    });
+
+                    // 클릭하면 앱 창 띄우기 (선택사항)
+                    noti.onclick = () => {
+                        ipcRenderer.send('dashboard-maximize'); // 창 복구 요청
+                    };
+
+                    // 중복 방지 목록에 추가
+                    setNotifiedLog(prev => new Set(prev).add(notificationKey));
+                }
+            });
+        };
+
+        // 1. 최초 실행
+        checkNotifications();
+
+        // 2. 30초마다 검사 실행
+        const timer = setInterval(checkNotifications, 30000);
+
+        return () => clearInterval(timer);
+    }, [todos, notifiedLog]);
+
     useEffect(() => {
         const loadSettings = async () => {
             try { const loaded = await ipcRenderer.invoke('load-settings'); if (loaded && loaded.selectedGroup) setSettings(loaded); } catch (e) { console.error("설정 로드 실패", e); }
@@ -188,10 +243,15 @@ function App() {
             const realEquip = await ipcRenderer.invoke('load-equipment') || { list: [] };
 
             const now = new Date();
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             const todayStr = now.toISOString().split('T')[0];
+            const koreanDays = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayName = koreanDays[now.getDay()];
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
             const todayShift = getShiftForDate(now);
-            const currentDateInfo = `Current Date: ${todayStr} (${days[now.getDay()]}), Time: ${now.getHours()}:${now.getMinutes()}`;
+            const currentDateInfo = `Current Date: ${todayStr} (${dayName}요일), Current Time: ${timeStr}, User Context: 사용자가 현재 한국에 있으며, 지금 시각은 ${dayName}요일 새벽 ${now.getHours()}시입니다. 사용자가 "이따", "아침에"라고 말하면 무조건 오늘(${todayStr}) 날짜로 계산하세요. 어제로 계산하지 마세요.`;
+
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
             const todoListContext = realSchedules.length > 0
                 ? realSchedules.map(t => {
@@ -231,8 +291,8 @@ function App() {
             };
             const libraryContext = generateCurriculumContext(realDev.tasks || []);
 
-            // 시스템 프롬프트 생성 (외부 파일 사용)
-            const systemInstruction = getSystemInstruction({
+            // 🟢 [핵심 2] 시스템 프롬프트 변수 선언 변경 (const -> let)
+            let systemInstruction = getSystemInstruction({
                 currentDateInfo,
                 todayShift,
                 todoListContext,
@@ -240,6 +300,23 @@ function App() {
                 mentalHistoryText,
                 libraryContext
             });
+
+            // 🟢 [핵심 3] 메모 vs 일정 구분 로직 추가
+            systemInstruction += `
+            
+            [명령어 구분 원칙 - 매우 중요]
+            1. **대시보드 메모 (create_dashboard_widget)**:
+               - 사용자가 "메모해줘", "적어줘", "기록해줘" 같은 표현을 사용하면 **반드시** 'create_dashboard_widget' (type: 'card') 명령을 사용하세요.
+               - 시간 정보가 포함되어 있어도 "메모"라고 명시했다면 일정이 아닌 위젯(Sticky Note)으로 만들어야 합니다.
+               - 예: "이따 6시 미팅 메모해" -> create_dashboard_widget { title: "메모", content: "6시 미팅", color: "amber" }
+
+            2. **일정 추가 (add_todo)**:
+               - 사용자가 "일정 잡아", "스케줄 추가해", "알려줘", "등록해"라고 말하거나, 명백히 할 일 관리를 원할 때 사용하세요.
+               - 예: "6시에 미팅 일정 추가해" -> add_todo { date: "...", startTime: "18:00", content: "미팅" }
+            
+            3. **기본값**:
+               - 구분이 모호할 때는 'add_todo'(일정)를 우선하되, "메모"라는 단어가 들어가면 무조건 1번(위젯)을 따르세요.
+            `;
 
             const model = genAI.getGenerativeModel({
                 model: "gemini-2.5-pro",

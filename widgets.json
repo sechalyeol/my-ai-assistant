@@ -25,5 +25,14 @@
     "url": "https://www.google.com",
     "color": "blue",
     "data": null
+  },
+  {
+    "id": 1765909694209,
+    "type": "card",
+    "title": "메모",
+    "content": "15:59 CHP 기동",
+    "url": null,
+    "color": "amber",
+    "data": null
   }
 ]
