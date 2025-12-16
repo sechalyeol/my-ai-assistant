@@ -1,8 +1,10 @@
-﻿// Last Updated: 2025-12-17 01:50:18
+﻿// Last Updated: 2025-12-17 03:03:57
+// DashboardView.jsx
+
 import React, { useState } from 'react';
 import {
     Sparkles, Heart, Cloud, CloudRain, Wallet, BookOpen, Calendar as CalendarIcon,
-    CalendarDays, ChevronRight, Settings, ExternalLink, Briefcase, Wrench, Activity, Lock, Bot
+    CalendarDays, ChevronRight, Settings, ExternalLink, Briefcase, Wrench, Activity, Lock, Bot, Trash, Trash2
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { BookCoverFlowWidget } from '../components/widgets/ChatWidgets';
@@ -50,6 +52,34 @@ const ModernCard = ({ title, icon: Icon, children, className = "", accentColor =
     );
 };
 
+// 🟢 [추가] 커스텀 확인 모달 컴포넌트
+const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100" onClick={e => e.stopPropagation()}>
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="p-3 bg-rose-50 dark:bg-rose-900/20 rounded-full text-rose-500">
+                        <Trash2 size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-1">{title}</h3>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed break-keep">{message}</p>
+                    </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                    <button onClick={onClose} className="flex-1 py-2.5 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">
+                        취소
+                    </button>
+                    <button onClick={onConfirm} className="flex-1 py-2.5 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-xl shadow-sm transition-colors">
+                        삭제
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // 🟢 [수정됨] ManualAccessWidget
 const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
     const manuals = work.manuals || [];
@@ -61,9 +91,9 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
     ];
 
     const handleSectionClick = (sectionId) => {
-        setDashboardSubView('work'); // 상위 탭 전환
+        setDashboardSubView('work');
         if (sectionId === 'COMMON') setWorkViewMode('BASIC_LIST');
-        else if (sectionId === 'FACILITY') setWorkViewMode('EQUIP_LIST'); // 설비 마스터 연결
+        else if (sectionId === 'FACILITY') setWorkViewMode('EQUIP_LIST');
         else if (sectionId === 'PROCESS') setWorkViewMode('OPER_LIST');
         else setWorkViewMode('HOME');
     };
@@ -75,12 +105,8 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
                 {sections.map((section, idx) => {
                     const targetCategoryIds = categories.filter(c => c.group === section.id).map(c => c.id);
                     const count = manuals.filter(m => targetCategoryIds.includes(m.category)).length;
-                    
-                    // 🟢 [핵심 수정] 설비 마스터(FACILITY)는 데이터 개수와 상관없이 항상 활성화(hasData = true)
-                    // COMMON은 원래 데이터가 있으면 활성화, PROCESS는 데이터가 있어야 활성화
                     const isAlwaysActive = section.id === 'FACILITY' || (section.id === 'COMMON' && count > 0);
                     const hasData = isAlwaysActive || count > 0;
-                    
                     const Icon = section.icon;
                     const colorMap = { amber: 'bg-amber-50/40 text-amber-700 border-amber-200/50 group-hover:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20', emerald: 'bg-emerald-50/40 text-emerald-700 border-emerald-200/50 group-hover:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20', indigo: 'bg-indigo-50/40 text-indigo-700 border-indigo-200/50 group-hover:border-indigo-400/50 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20' };
                     const activeStyle = colorMap[section.color];
@@ -88,7 +114,6 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
                     return (
                         <div key={idx} onClick={() => hasData && handleSectionClick(section.id)} className={`group relative w-full flex-1 px-3 rounded-xl border flex items-center justify-between transition-all duration-300 ${hasData ? `cursor-pointer hover:-translate-y-0.5 hover:shadow-sm ${activeStyle}` : "bg-zinc-50/30 border-zinc-100/50 text-zinc-400 border-dashed dark:bg-white/5 dark:border-zinc-800 dark:text-zinc-600 opacity-60 cursor-not-allowed"}`}>
                             <div className="flex items-center gap-3"><div className={`p-1.5 rounded-lg ${hasData ? 'bg-white/60 dark:bg-white/10 shadow-sm' : 'bg-zinc-100/50 dark:bg-zinc-800'}`}><Icon size={16} /></div><div className="flex flex-col justify-center"><span className="text-[9px] font-bold opacity-70 uppercase tracking-wider leading-none mb-0.5">{section.engLabel}</span><span className="font-bold text-xs">{section.label}</span></div></div>
-                            {/* 설비 마스터일 때는 'GO' 표시, 나머지는 개수 또는 잠금 아이콘 */}
                             <div>{hasData ? (<div className="flex items-center gap-1"><span className="text-xs font-bold bg-white/40 dark:bg-white/10 px-1.5 py-0.5 rounded text-current">{section.id === 'FACILITY' ? 'GO' : count}</span></div>) : (<Lock size={12} className="opacity-40" />)}</div>
                         </div>
                     );
@@ -105,7 +130,9 @@ const DashboardView = ({
     handleSendMessage, settings, handleGroupChange,
     activeBookId, setActiveBookId,
     work, setWorkViewMode,
-    setShowSettingsModal // 🟢 App.jsx에서 내려받은 함수 사용
+    setShowSettingsModal,
+    customWidgets = [],
+    setCustomWidgets
 }) => {
     const [isMentalAnalyzing, setIsMentalAnalyzing] = useState(false);
     const visibleModules = settings.visibleModules || { schedule: true, finance: true, mental: true, development: true, work: true };
@@ -114,11 +141,7 @@ const DashboardView = ({
 
     const saveWidgetOrder = (newOrder) => {
         const newSettings = { ...settings, dashboardWidgetOrder: newOrder };
-        
-        // 1. 일렉트론 파일 저장 (영구 저장)
         ipcRenderer.send('save-settings', newSettings);
-        
-        // 2. 🟢 [복구] 부모 컴포넌트(App.jsx)의 상태 즉시 업데이트 (화면 깜빡임 방지)
         if (handleGroupChange) {
             handleGroupChange(newSettings);
         }
@@ -168,16 +191,117 @@ const DashboardView = ({
             <ModernCard title="Upcoming Schedule" icon={CalendarIcon} accentColor="zinc" count={upcomingTodos.length > 0 ? `${upcomingTodos.length} Tasks` : null}>
                 <div className="flex flex-col h-full overflow-hidden">
                     <div className="flex-1 overflow-y-auto scrollbar-hide pr-1 min-h-0 mb-2 space-y-1.5 pt-1">
-                        {upcomingTodos.length === 0 ? (<div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-1"><CalendarDays size={20} className="opacity-20" /><span className="text-xs">일정 없음</span></div>) : (upcomingTodos.map((t) => {
-                            let dateLabel = ""; if (t.date) { const parts = t.date.split('-'); if (parts.length === 3) dateLabel = `${parts[1]}.${parts[2]}`; } if (t.startTime) { dateLabel += ` ${t.startTime}`; } else if (t.time) { dateLabel += ` ${t.time}`; }
-                            const isWork = (t.text || "").includes("근무") || (t.category === 'shift'); const dotColor = isWork ? "bg-amber-400" : "bg-indigo-400";
-                            return (<div key={t.id} className="group/task flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50"><div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${dotColor} mt-0.5`}></div><div className="flex-1 flex items-center justify-between min-w-0 gap-2"><span className="text-xs font-medium truncate text-zinc-700 dark:text-zinc-200">{t.text}</span>{dateLabel && (<span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 rounded-md font-medium">{dateLabel}</span>)}</div></div>);
+                        {upcomingTodos.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-1">
+                                <CalendarDays size={20} className="opacity-20" /><span className="text-xs">일정 없음</span>
+                            </div>
+                        ) : (upcomingTodos.map((t) => {
+                            let dateLabel = "";
+                            if (t.date) { const parts = t.date.split('-'); if (parts.length === 3) dateLabel = `${parts[1]}.${parts[2]}`; }
+                            if (t.startTime) { dateLabel += ` ${t.startTime}`; } else if (t.time) { dateLabel += ` ${t.time}`; }
+                            const isWork = (t.text || "").includes("근무") || (t.category === 'shift');
+                            const dotColor = isWork ? "bg-amber-400" : "bg-indigo-400";
+
+                            return (
+                                <div key={t.id} className="group/task relative flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">
+                                    <div className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${dotColor} mt-0.5`}></div>
+                                    <div className="flex-1 flex items-center justify-between min-w-0 gap-2">
+                                        <span className="text-xs font-medium truncate text-zinc-700 dark:text-zinc-200">{t.text}</span>
+                                        {dateLabel && (
+                                            <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 rounded-md font-medium group-hover/task:opacity-0 transition-opacity">
+                                                {dateLabel}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* 🟢 [추가됨] 삭제 버튼: 호버 시 날짜 대신 나타남 */}
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDeleteTaskTargetId(t.id); // 모달 띄우기
+                                        }}
+                                        className="absolute right-2 p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded opacity-0 group-hover/task:opacity-100 transition-all"
+                                        title="일정 삭제"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            );
                         }))}
                     </div>
-                    <div className="pt-2 mt-auto border-t border-zinc-100 dark:border-zinc-800/50"><button onClick={() => setDashboardSubView('schedules')} className="w-full py-2 px-3 bg-zinc-50 hover:bg-indigo-50 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 rounded-lg transition-all flex items-center justify-center gap-2 group">전체 일정 <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" /></button></div>
+                    <div className="pt-2 mt-auto border-t border-zinc-100 dark:border-zinc-800/50">
+                        <button onClick={() => setDashboardSubView('schedules')} className="w-full py-2 px-3 bg-zinc-50 hover:bg-indigo-50 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 rounded-lg transition-all flex items-center justify-center gap-2 group">
+                            전체 일정 <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    </div>
                 </div>
             </ModernCard>
         )
+    };
+
+    // 🟢 [추가] 중복된 ID를 자동으로 감지해서 고쳐주는 코드 (이걸 추가하세요!)
+    React.useEffect(() => {
+        if (customWidgets.length > 0) {
+            const seenIds = new Set();
+            let hasDuplicates = false;
+
+            // 1. 중복 검사
+            customWidgets.forEach(w => {
+                if (seenIds.has(w.id)) hasDuplicates = true;
+                seenIds.add(w.id);
+            });
+
+            // 2. 중복이 있다면 ID 재발급 (기존 데이터 유지)
+            if (hasDuplicates) {
+                console.log("중복 ID 감지됨! 자동으로 수정합니다.");
+                setCustomWidgets(prev => prev.map((w, index) => ({
+                    ...w,
+                    // ID가 겹치지 않게 '현재시간 + 랜덤숫자 + 인덱스'로 재설정
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`
+                })));
+            }
+        }
+    }, [customWidgets.length]);
+
+    const [deleteTargetId, setDeleteTargetId] = useState(null);
+
+    const [deleteTaskTargetId, setDeleteTaskTargetId] = useState(null);
+
+    // 🟢 [추가] 모달에서 '삭제' 눌렀을 때 실행될 진짜 삭제 함수
+    const confirmDeleteTask = () => {
+        if (deleteTaskTargetId) {
+            setTodos(prev => prev.filter(t => t.id !== deleteTaskTargetId));
+            setDeleteTaskTargetId(null); // 모달 닫기
+        }
+    };
+
+    // 🟢 [수정됨] 이 함수가 없어서 에러가 났었습니다. 추가했습니다.
+    const handleDeleteWidget = (id) => {
+        setDeleteTargetId(id);
+    };
+
+    const handleDeleteTask = (id) => {
+        // UI에서 즉시 제거
+        setTodos(prev => prev.filter(t => t.id !== id));
+
+        ipcRenderer.send('delete-todo', id);
+    };
+
+    const confirmDelete = () => {
+        if (deleteTargetId) {
+            setCustomWidgets(prev => prev.filter(w => w.id !== deleteTargetId));
+            setDeleteTargetId(null);
+        }
+    };
+
+    const shortcuts = customWidgets.filter(w => w.type === 'link' || w.url);
+    const infoWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
+
+    const getFaviconUrl = (url) => {
+        try {
+            const domain = new URL(url).hostname;
+            return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+        } catch (e) { return null; }
     };
 
     return (
@@ -186,11 +310,91 @@ const DashboardView = ({
                 <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Dashboard Overview</h2>
                 <div className="flex gap-2"><span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">💡 위젯을 드래그하여 정렬 순서를 변경할 수 있습니다.</span><button onClick={() => setShowSettingsModal(true)} className="text-[10px] text-zinc-500 hover:text-zinc-800 flex items-center gap-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors"><Settings size={15} /></button></div>
             </div>
+            {shortcuts.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-xs font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Quick Links</h3>
+                    <div className="flex flex-wrap gap-4 animate-fade-in-down">
+                        {/* 🟢 [수정됨] key={widget.id} -> key={`${widget.id}-${index}`} 로 변경하여 중복 키 에러 방지 */}
+                        {shortcuts.map((widget, index) => {
+                            const favicon = getFaviconUrl(widget.url);
+                            return (
+                                <div key={`${widget.id}-${index}`} className="group relative flex flex-col items-center gap-2">
+                                    <button
+                                        onClick={() => window.open(widget.url, '_blank')}
+                                        className="w-16 h-16 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center justify-center transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 group-hover:ring-2 group-hover:ring-indigo-500/20"
+                                    >
+                                        {favicon ? (
+                                            <img src={favicon} alt={widget.title} className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" />
+                                        ) : (
+                                            <ExternalLink size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                        )}
+                                    </button>
+
+                                    <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">
+                                        {widget.title}
+                                    </span>
+
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteWidget(widget.id); }}
+                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm hover:bg-rose-600 hover:scale-110 z-20"
+                                        title="삭제"
+                                    >
+                                        <span className="text-xs font-bold leading-none mb-0.5">×</span>
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {infoWidgets.length > 0 && (
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down">
+                    {/* 🟢 [수정됨] key={widget.id} -> key={`${widget.id}-${index}`} 로 변경 */}
+                    {infoWidgets.map((widget, index) => (
+                        <div key={`${widget.id}-${index}`} className="relative group">
+                            <ModernCard
+                                title={widget.title}
+                                icon={Sparkles}
+                                accentColor={widget.color}
+                            >
+                                <div className="flex flex-col h-full justify-center">
+                                    <div className="text-lg font-bold text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap text-center px-2">
+                                        {widget.content}
+                                    </div>
+                                </div>
+                            </ModernCard>
+                            <button
+                                onClick={() => handleDeleteWidget(widget.id)}
+                                className="absolute top-2 right-2 p-1.5 bg-zinc-100 hover:bg-rose-500 hover:text-white text-zinc-400 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                                <Trash size={12} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div className="grid grid-cols-2 gap-4 auto-rows-[80px] grid-flow-dense">
                 {widgetOrder.filter(key => { if (key === 'tasks') return visibleModules.schedule; return visibleModules[key]; }).map((widgetKey, index) => (
                     <div key={widgetKey} draggable onDragStart={(e) => onDragStart(e, index)} onDragEnter={(e) => onDragOver(e, index)} onDragEnd={onDragEnd} onDragOver={(e) => e.preventDefault()} className={`${getWidgetSpan(widgetKey)} cursor-move transition-transform active:scale-[0.99]`}>{widgetComponents[widgetKey]}</div>
                 ))}
             </div>
+
+            <ConfirmModal
+                isOpen={!!deleteTargetId}
+                onClose={() => setDeleteTargetId(null)}
+                onConfirm={confirmDelete}
+                title="위젯 삭제"
+                message="이 위젯을 대시보드에서 제거하시겠습니까? 데이터는 유지되지 않습니다."
+            />
+
+            <ConfirmModal
+                isOpen={!!deleteTaskTargetId}
+                onClose={() => setDeleteTaskTargetId(null)}
+                onConfirm={confirmDeleteTask}
+                title="일정 삭제"
+                message="이 일정을 목록에서 삭제하시겠습니까?"
+            />
         </div>
     );
 };

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "1765907583037-wsod4tb61-0",
+    "type": "link",
+    "title": "네이버",
+    "content": "바로가기",
+    "url": "https://www.naver.com",
+    "color": "emerald",
+    "data": null
+  },
+  {
+    "id": "1765907583037-p4mgkfr7d-2",
+    "type": "link",
+    "title": "유튜브",
+    "content": "바로가기",
+    "url": "https://www.youtube.com",
+    "color": "rose",
+    "data": null
+  },
+  {
+    "id": "1765907583037-x9vdtbht4-3",
+    "type": "link",
+    "title": "구글",
+    "content": "바로가기",
+    "url": "https://www.google.com",
+    "color": "blue",
+    "data": null
+  }
+]

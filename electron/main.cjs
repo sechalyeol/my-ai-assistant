@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 01:50:18
+﻿// Last Updated: 2025-12-17 03:03:57
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
@@ -35,7 +35,8 @@ const DATA_PATHS = {
   work: path.join(PROJECT_ROOT, 'work.json'),
   settings: path.join(PROJECT_ROOT, 'settings.json'),
   equipment: path.join(PROJECT_ROOT, 'equipment.json'),
-  user: path.join(PROJECT_ROOT, 'user-profile.json')
+  user: path.join(PROJECT_ROOT, 'user-profile.json'),
+  widgets: path.join(PROJECT_ROOT, 'widgets.json')
 };
 
 // 통합된 데이터 업데이트 알림 함수
@@ -395,4 +396,11 @@ ipcMain.handle('select-any-file', async () => {
         filePath: result.filePaths[0], 
         fileName: path.basename(result.filePaths[0]) 
     };
+});
+
+// 🌟 [추가] 커스텀 위젯 데이터 로드/저장 핸들러
+ipcMain.handle('load-custom-widgets', () => loadData(DATA_PATHS.widgets, []));
+
+ipcMain.on('save-custom-widgets', (event, data) => {
+    saveData(DATA_PATHS.widgets, data, 'widgets');
 });

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 01:50:18
+﻿// Last Updated: 2025-12-17 03:03:57
 // src/components/ui/PanZoomViewer.jsx
 import React, { useState, useRef } from 'react';
 import { ZoomIn, ZoomOut, Maximize, Image } from 'lucide-react';

@@ -1,8 +1,8 @@
-﻿// Last Updated: 2025-12-17 01:50:18
+﻿// Last Updated: 2025-12-17 03:03:57
 // src/components/modals/TodoModal.jsx
 import React, { useState } from 'react';
 import {
-    Edit3, X, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, Trash2, Save
+    Edit3, X, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, Trash2, Save, AlertCircle
 } from 'lucide-react';
 
 const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
@@ -12,6 +12,9 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
     const [showCalendar, setShowCalendar] = useState(false);
     const [showStartTimePicker, setShowStartTimePicker] = useState(false);
     const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+    
+    // 🟢 [추가] 삭제 확인 모드 상태
+    const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
 
     // 달력 네비게이션 상태
     const [navDate, setNavDate] = useState(todo && todo.date ? new Date(todo.date) : new Date());
@@ -64,7 +67,7 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
         );
     };
 
-    // --- ⏰ 커스텀 시간 선택기 (너비 축소 및 위치 보정) ---
+    // --- ⏰ 커스텀 시간 선택기 ---
     const renderCustomTimePicker = (field, closeFn, align = 'left') => {
         const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
         const minutes = ['00', '10', '20', '30', '40', '50'];
@@ -72,7 +75,6 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
         const [currH, currM] = currentVal.split(':');
 
         return (
-            // 🟢 [수정] w-64 -> w-48 (너비 축소), right-0 클래스 지원
             <div className={`absolute top-full mt-2 w-48 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl z-50 p-2 animate-fade-in-up flex gap-2 h-48 ${align === 'right' ? 'right-0' : 'left-0'}`}>
                 <div className="flex-1 overflow-y-auto scrollbar-hide border-r border-zinc-100 dark:border-zinc-700 pr-1">
                     <div className="text-[10px] text-zinc-400 font-bold text-center mb-1 sticky top-0 bg-white dark:bg-zinc-800 py-1">시</div>
@@ -96,6 +98,17 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
 
     // 🟢 배경 클릭 시 모든 팝업 닫기
     const closeAllPopups = () => { setShowCalendar(false); setShowStartTimePicker(false); setShowEndTimePicker(false); };
+
+    // 🟢 실제 삭제 실행 핸들러
+    const handleActualDelete = () => {
+        if (onDelete) {
+            onDelete(todo.id);
+            onClose(); // 삭제 후 모달 닫기
+        } else {
+            console.error("onDelete 함수가 TodoModal에 전달되지 않았습니다!");
+            alert("삭제 기능이 연결되지 않았습니다. 개발자에게 문의하세요.");
+        }
+    };
 
     return (
         <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in transition-all p-4">
@@ -132,7 +145,6 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
                         <div className="col-span-2 relative">
                             <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1.5 block">날짜</label>
                             <div className="relative">
-                                {/* 🟢 type="text" + readOnly로 브라우저 기본 달력 원천 차단 */}
                                 <input
                                     type="text"
                                     readOnly
@@ -160,7 +172,6 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
                                 />
                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400"><Clock size={14} /></div>
                             </div>
-                            {/* 왼쪽 정렬 */}
                             {showStartTimePicker && renderCustomTimePicker('startTime', setShowStartTimePicker, 'left')}
                         </div>
 
@@ -178,7 +189,6 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
                                 />
                                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400"><Clock size={14} /></div>
                             </div>
-                            {/* 🟢 오른쪽 정렬 (화면 밖으로 나가는 것 방지) */}
                             {showEndTimePicker && renderCustomTimePicker('endTime', setShowEndTimePicker, 'right')}
                         </div>
                     </div>
@@ -190,10 +200,41 @@ const TodoModal = ({ todo, onClose, onSave, onDelete }) => {
                     </div>
                 </div>
 
-                {/* 하단 버튼 */}
+                {/* 🟢 [수정됨] 하단 버튼 영역: 삭제 확인 모드 추가 */}
                 <div className="flex gap-3 mt-8">
-                    <button onClick={() => onDelete(todo.id)} className="flex-1 py-3 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-sm font-bold transition-colors flex items-center justify-center gap-2"><Trash2 size={16} /> 삭제</button>
-                    <button onClick={() => onSave(editedTodo)} className="flex-[2] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"><Save size={16} /> 저장하기</button>
+                    {isDeleteConfirming ? (
+                        // 삭제 확인 모드일 때 보여질 버튼들
+                        <>
+                            <button 
+                                onClick={() => setIsDeleteConfirming(false)} 
+                                className="flex-1 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-sm font-bold transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            >
+                                취소
+                            </button>
+                            <button 
+                                onClick={handleActualDelete} 
+                                className="flex-[2] py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2 animate-fade-in"
+                            >
+                                <AlertCircle size={16} /> 네, 삭제할게요
+                            </button>
+                        </>
+                    ) : (
+                        // 평소 상태일 때 보여질 버튼들
+                        <>
+                            <button 
+                                onClick={() => setIsDeleteConfirming(true)} 
+                                className="flex-1 py-3 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> 삭제
+                            </button>
+                            <button 
+                                onClick={() => onSave(editedTodo)} 
+                                className="flex-[2] py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                            >
+                                <Save size={16} /> 저장하기
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

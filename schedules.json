@@ -177,5 +177,25 @@
     "done": false,
     "memo": "",
     "category": "work"
+  },
+  {
+    "id": 1765908067164.3672,
+    "text": "CHP 기동",
+    "date": "2025-12-16",
+    "startTime": "06:10",
+    "endTime": "07:10",
+    "done": false,
+    "memo": "",
+    "category": "work"
+  },
+  {
+    "id": 1765908142553.6494,
+    "text": "약속",
+    "date": "2025-12-17",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "done": false,
+    "memo": "",
+    "category": "personal"
   }
 ]

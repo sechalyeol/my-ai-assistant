@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 01:50:18
+﻿// Last Updated: 2025-12-17 03:03:57
 export const getSystemInstruction = ({
     currentDateInfo,
     todayShift,
@@ -68,8 +68,32 @@ export const getSystemInstruction = ({
         - **Note Taking**: "Note that [Content]" -> **ACTION: "record_study"** (note: Content).
         - **Quiz Request**: "Quiz on [Topic]" -> **ACTION: "start_quiz"** (topic: Topic).
 
-        [Task 4: Dashboard Widgets]
-        - Trigger: "Check schedule", "Show finance", "Mental status", "Study progress" -> Use "show_X" actions.
+        [Task 4: Dashboard Widgets & Customization]
+        - **Trigger**: 
+          1. "Add shortcut to [Site name]" (e.g., "Google 바로가기 추가해줘")
+          2. "Add widget for [Title] with [Content]" (e.g., "환율 정보 위젯 만들어줘")
+          3. "Remove/Delete [Title] widget" (e.g., "구글 위젯 삭제해줘")
+        
+        - **Actions**:
+          - To Add: "create_dashboard_widget"
+          - To Remove: "delete_dashboard_widget"
+        
+        - **Colors**: indigo, rose, emerald, amber, violet, blue, zinc (Choose one that fits the context).
+
+        - **Rules & Logic**:
+          1. **Web Shortcuts (Links)**: 
+             - Set "widgetType": "link".
+             - **MUST** provide a valid "url" (e.g., "https://www.google.com", "https://www.naver.com").
+             - "content" should be a short label (e.g., "Google", "바로가기").
+          
+          2. **Info Cards (Text)**: 
+             - Set "widgetType": "card".
+             - Provide "title" and "content".
+             - Do NOT set "url".
+             - Example: User says "Motivation Quote" -> Title: "Today's Quote", Content: "Just do it.", Color: "rose".
+
+          3. **Deletion**:
+             - Use "delete_dashboard_widget" with the exact "title" of the widget to remove.
 
         [Task 5: Facility Management] (Priority: High)
         - **Trigger**: User mentions equipment maintenance, repair, or operation (e.g., "1호기 밸브 교체했어", "가스터빈 점검 완료").
@@ -93,7 +117,7 @@ export const getSystemInstruction = ({
         { "action": "modify_todo", "id": number, "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "content": "string" }
         { "action": "delete_todo", "id": number }
         { "action": "search_books", "results": [] }
-        { "action": "generate_curriculum", "title": "string", ... } 
+        { "action": "generate_curriculum", "title": "string", "children": [] } 
         { "action": "record_study", "topic": "string", "note": "string", "mark_done": boolean }
         { "action": "delete_book", "id": "string" }
         { "action": "show_schedule" }
@@ -103,7 +127,9 @@ export const getSystemInstruction = ({
         { "action": "chat", "message": "string" }
         { "action": "start_quiz", "topic": "string" }
         { "action": "add_equipment_log", "equipId": number|null, "content": "string", "date": "YYYY-MM-DD" }
+        { "action": "create_dashboard_widget", "widgetType": "card", "title": "string", "content": "string", "url": "string", "color": "string" }
+        { "action": "delete_dashboard_widget", "title": "string" }
         
         IMPORTANT: If multiple actions needed, return a JSON ARRAY.
-            `;
+    `;
 };
