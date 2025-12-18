@@ -15,6 +15,38 @@
         "location": "현장",
         "system": "급수 계통"
       }
+    },
+    {
+      "id": 1766025824732,
+      "title": "Primary Cooling Water Pump",
+      "desc": "",
+      "chapters": [],
+      "documents": [],
+      "logs": [],
+      "parts": [],
+      "meta": {
+        "code": "EQ-000",
+        "maker": "제조사 미정",
+        "installDate": "2025-12-18",
+        "location": "현장",
+        "system": "냉각계통"
+      }
+    },
+    {
+      "id": 1766029174708,
+      "title": "Secondary Cooling Water Pump",
+      "desc": "",
+      "chapters": [],
+      "documents": [],
+      "logs": [],
+      "parts": [],
+      "meta": {
+        "code": "EQ-000",
+        "maker": "제조사 미정",
+        "installDate": "2025-12-18",
+        "location": "현장",
+        "system": "냉각계통"
+      }
     }
   ],
   "fieldGuides": []

@@ -1,17 +1,18 @@
-﻿// Last Updated: 2025-12-17 03:30:09
+﻿// Last Updated: 2025-12-18 17:50:21
 // DashboardView.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react'; // 🌟 useRef, useEffect 추가
 import {
     Sparkles, Heart, Cloud, CloudRain, Wallet, BookOpen, Calendar as CalendarIcon,
-    CalendarDays, ChevronRight, Settings, ExternalLink, Briefcase, Wrench, Activity, Lock, Bot, Trash, Trash2
+    CalendarDays, ChevronRight, Settings, ExternalLink, Briefcase, Wrench, Activity,
+    Lock, Bot, Trash, Trash2, Clock, StickyNote, Building2, X, ChevronDown
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { BookCoverFlowWidget } from '../components/widgets/ChatWidgets';
 
 const { ipcRenderer } = window.require('electron');
 
-// 🟢 [내부 컴포넌트 1] 멘탈 비주얼 로직
+// 🟢 [내부 컴포넌트 1] 멘탈 비주얼 로직 (유지)
 const getMentalVisuals = (score) => {
     if (score === 0) return { themeName: "zinc", icon: Sparkles, gradient: "from-zinc-400 to-zinc-500", bgIconColor: "text-zinc-500/10", scoreColor: "text-zinc-400 dark:text-zinc-500", badge: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400", adviceBoxBorder: "border-zinc-200 dark:border-zinc-700", headerBorder: "border-zinc-200 dark:border-zinc-700", headerBg: "bg-zinc-50 dark:bg-zinc-800/50", botIcon: "text-zinc-400", headerText: "text-zinc-500 dark:text-zinc-400", inputFocus: "focus:ring-zinc-400/20" };
     else if (score >= 80) return { themeName: "rose", icon: Heart, gradient: "from-rose-400 to-pink-500", bgIconColor: "text-rose-500/10", scoreColor: "text-rose-600 dark:text-rose-400", badge: "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400", adviceBoxBorder: "border-rose-100/50 dark:border-rose-900/30", headerBorder: "border-rose-100/30 dark:border-rose-900/20", headerBg: "bg-rose-50/30 dark:bg-rose-900/10", botIcon: "text-rose-500", headerText: "text-rose-600 dark:text-rose-400", inputFocus: "focus:ring-rose-500/20" };
@@ -19,7 +20,7 @@ const getMentalVisuals = (score) => {
     else return { themeName: "indigo", icon: CloudRain, gradient: "from-indigo-400 to-blue-500", bgIconColor: "text-indigo-500/10", scoreColor: "text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400", adviceBoxBorder: "border-indigo-100/50 dark:border-indigo-900/30", headerBorder: "border-indigo-100/30 dark:border-indigo-900/20", headerBg: "bg-indigo-50/30 dark:bg-indigo-900/10", botIcon: "text-indigo-500", headerText: "text-indigo-600 dark:text-indigo-400", inputFocus: "focus:ring-indigo-500/20" };
 };
 
-// 🟢 [내부 컴포넌트 2] ModernCard
+// 🟢 [내부 컴포넌트 2] ModernCard (유지)
 const ModernCard = ({ title, icon: Icon, children, className = "", accentColor = "indigo", count = null, headerAction = null }) => {
     const colors = {
         rose: "from-rose-500/10 to-rose-500/5 border-rose-200/50 dark:border-rose-500/20 text-rose-500",
@@ -52,7 +53,7 @@ const ModernCard = ({ title, icon: Icon, children, className = "", accentColor =
     );
 };
 
-// 🟢 [추가] 커스텀 확인 모달 컴포넌트
+// 🟢 [추가] 커스텀 확인 모달 컴포넌트 (유지)
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     if (!isOpen) return null;
     return (
@@ -80,7 +81,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     );
 };
 
-// 🟢 [수정됨] ManualAccessWidget
+// 🟢 [수정됨] ManualAccessWidget (유지)
 const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
     const manuals = work.manuals || [];
     const categories = work.categories || [];
@@ -134,10 +135,108 @@ const DashboardView = ({
     customWidgets = [],
     setCustomWidgets
 }) => {
+    // -----------------------------------------------------
+    // 🌟 [상태 및 레퍼런스]
     const [isMentalAnalyzing, setIsMentalAnalyzing] = useState(false);
+    const [isDraggingMode, setIsDraggingMode] = useState(false); 
+    const longPressTimer = useRef(null); 
+    // -----------------------------------------------------
+    
     const visibleModules = settings.visibleModules || { schedule: true, finance: true, mental: true, development: true, work: true };
     const [widgetOrder, setWidgetOrder] = useState(settings.dashboardWidgetOrder || ['mental', 'tasks', 'finance', 'development', 'work']);
-    const [draggedItem, setDraggedItem] = useState(null);
+    const [draggedItem, setDraggedItem] = useState(null); 
+    const [isQuickLinksExpanded, setIsQuickLinksExpanded] = useState(false);
+
+    const shortcuts = customWidgets.filter(w => w.type === 'link' || w.url);
+    const infoWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
+    
+    // 🌟 [Quick Link 순서 관리]
+    const [quickLinkOrder, setQuickLinkOrder] = useState(shortcuts.map(w => w.id));
+
+    useEffect(() => {
+        // customWidgets가 변경될 때 (추가/삭제), quickLinkOrder를 재설정
+        const currentIds = shortcuts.map(w => w.id);
+        if (currentIds.length !== quickLinkOrder.length || currentIds.some(id => !quickLinkOrder.includes(id))) {
+             setQuickLinkOrder(currentIds);
+        }
+    }, [shortcuts.length, customWidgets]);
+    
+    // 🌟 [Quick Links 순서 저장]
+    const saveQuickLinksOrder = (newOrder) => {
+        const orderedWidgets = newOrder.map(id => customWidgets.find(w => w.id === id)).filter(Boolean);
+        setCustomWidgets(orderedWidgets);
+        setQuickLinkOrder(newOrder);
+    };
+    
+    // Quick Links 드래그 앤 드롭 핸들러
+    const onShortcutDragStart = (e, id) => {
+        if (!isDraggingMode) { e.preventDefault(); return; }
+        e.dataTransfer.setData("widgetId", id);
+
+        // 🌟 [수정]: draggedItem 상태 업데이트
+        setDraggedItem(id); 
+
+        // 🌟 [수정]: 드래그 고스트 이미지용 임시 스타일
+        const target = e.currentTarget;
+        const dragIcon = target.cloneNode(true);
+        dragIcon.style.opacity = 0.5;
+        dragIcon.style.position = 'absolute';
+        dragIcon.style.top = '-1000px'; 
+        document.body.appendChild(dragIcon);
+        e.dataTransfer.setDragImage(dragIcon, target.offsetWidth / 2, target.offsetHeight / 2);
+        setTimeout(() => document.body.removeChild(dragIcon), 0);
+        
+        // e.currentTarget.classList.add('is-dragging'); // is-dragging은 opacity-0으로 대체
+    };
+    
+    const onShortcutDragEnd = (e) => {
+        // e.currentTarget.style.opacity = '1'; // opacity는 isBeingDragged에 의해 관리
+        setDraggedItem(null); 
+        // e.currentTarget.classList.remove('is-dragging');
+        saveQuickLinksOrder(quickLinkOrder);
+    };
+    
+    const onShortcutDragOver = (e, targetId) => {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData("widgetId");
+        const draggedIndex = quickLinkOrder.indexOf(draggedId);
+        const targetIndex = quickLinkOrder.indexOf(targetId);
+        
+        if (draggedIndex === -1 || targetIndex === -1 || draggedId === targetId) return;
+        
+        const newOrder = [...quickLinkOrder];
+        newOrder.splice(draggedIndex, 1);
+        newOrder.splice(targetIndex, 0, draggedId);
+        
+        setQuickLinkOrder(newOrder); // 🌟 상태를 업데이트하여 애니메이션 트리거
+    };
+    
+    // 🌟 [길게 누르기 감지 로직]
+    const handlePressStart = (id) => (e) => {
+        if (e.button !== 0) return; 
+        if (isDraggingMode) return; 
+        
+        longPressTimer.current = setTimeout(() => {
+            setIsDraggingMode(true);
+            longPressTimer.current = null;
+        }, 3000); 
+    };
+
+    const handlePressEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    const handleDragModeExit = () => {
+        if (isDraggingMode) {
+            setIsDraggingMode(false);
+            setDraggedItem(null);
+            saveQuickLinksOrder(quickLinkOrder);
+        }
+    };
+    // -----------------------------------------------------
 
     const saveWidgetOrder = (newOrder) => {
         const newSettings = { ...settings, dashboardWidgetOrder: newOrder };
@@ -151,11 +250,31 @@ const DashboardView = ({
     const onDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedItem(null); saveWidgetOrder(widgetOrder); };
     const onDragOver = (e, index) => { e.preventDefault(); const draggedOverItem = widgetOrder[index]; if (draggedItem === draggedOverItem) return; const items = [...widgetOrder]; items.splice(items.indexOf(draggedItem), 1); items.splice(items.indexOf(draggedOverItem), 0, draggedItem); setWidgetOrder(items); };
 
+    // 위젯 크기 로직 (4열 그리드 대응)
     const getWidgetSpan = (key) => {
+        const commonSpan = 'col-span-2 md:col-span-2';
         switch (key) {
-            case 'mental': case 'tasks': case 'development': case 'work': return 'col-span-1 row-span-3';
-            case 'finance': default: return 'col-span-1 row-span-2';
+            case 'mental': case 'tasks': case 'development': case 'work':
+                return `${commonSpan} row-span-3`;
+            case 'finance': default:
+                return `${commonSpan} row-span-2`;
         }
+    };
+
+    // 🟢 [최종_수정] 복잡한 계산 제거, 1:1 비율 적용
+    const getMemoLayoutSettings = (count) => {
+        if (count === 0) return { wrapper: "hidden", grid: "", style: {} };
+
+        const isEven = count % 2 === 0;
+        const gridCols = "grid-cols-2"; // 2열 고정
+
+        const spanValue = count === 1 ? 2 : count;
+
+        return {
+            className: "col-span-2 md:col-span-2",
+            grid: `${gridCols} gap-3`,
+            style: { gridRow: `span ${spanValue} / span ${spanValue}` }
+        };
     };
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -214,11 +333,10 @@ const DashboardView = ({
                                         )}
                                     </div>
 
-                                    {/* 🟢 [추가됨] 삭제 버튼: 호버 시 날짜 대신 나타남 */}
-                                    <button 
+                                    <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setDeleteTaskTargetId(t.id); // 모달 띄우기
+                                            setDeleteTaskTargetId(t.id);
                                         }}
                                         className="absolute right-2 p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded opacity-0 group-hover/task:opacity-100 transition-all"
                                         title="일정 삭제"
@@ -239,24 +357,21 @@ const DashboardView = ({
         )
     };
 
-    // 🟢 [추가] 중복된 ID를 자동으로 감지해서 고쳐주는 코드 (이걸 추가하세요!)
+    // 중복 ID 방지 (유지)
     React.useEffect(() => {
         if (customWidgets.length > 0) {
             const seenIds = new Set();
             let hasDuplicates = false;
 
-            // 1. 중복 검사
             customWidgets.forEach(w => {
                 if (seenIds.has(w.id)) hasDuplicates = true;
                 seenIds.add(w.id);
             });
 
-            // 2. 중복이 있다면 ID 재발급 (기존 데이터 유지)
             if (hasDuplicates) {
                 console.log("중복 ID 감지됨! 자동으로 수정합니다.");
                 setCustomWidgets(prev => prev.map((w, index) => ({
                     ...w,
-                    // ID가 겹치지 않게 '현재시간 + 랜덤숫자 + 인덱스'로 재설정
                     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`
                 })));
             }
@@ -264,27 +379,17 @@ const DashboardView = ({
     }, [customWidgets.length]);
 
     const [deleteTargetId, setDeleteTargetId] = useState(null);
-
     const [deleteTaskTargetId, setDeleteTaskTargetId] = useState(null);
 
-    // 🟢 [추가] 모달에서 '삭제' 눌렀을 때 실행될 진짜 삭제 함수
     const confirmDeleteTask = () => {
         if (deleteTaskTargetId) {
             setTodos(prev => prev.filter(t => t.id !== deleteTaskTargetId));
-            setDeleteTaskTargetId(null); // 모달 닫기
+            setDeleteTaskTargetId(null);
         }
     };
 
-    // 🟢 [수정됨] 이 함수가 없어서 에러가 났었습니다. 추가했습니다.
     const handleDeleteWidget = (id) => {
         setDeleteTargetId(id);
-    };
-
-    const handleDeleteTask = (id) => {
-        // UI에서 즉시 제거
-        setTodos(prev => prev.filter(t => t.id !== id));
-
-        ipcRenderer.send('delete-todo', id);
     };
 
     const confirmDelete = () => {
@@ -294,8 +399,20 @@ const DashboardView = ({
         }
     };
 
-    const shortcuts = customWidgets.filter(w => w.type === 'link' || w.url);
-    const infoWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
+    const MAX_VISIBLE_SHORTCUTS = 4;
+    const shouldCollapse = shortcuts.length > MAX_VISIBLE_SHORTCUTS;
+
+    // 🌟 [추가]: quickLinkOrder를 사용하여 shortcuts를 정렬합니다.
+    const sortedShortcuts = quickLinkOrder
+        .map(id => shortcuts.find(w => w.id === id))
+        .filter(Boolean); // null/undefined 제거 (안전장치)
+
+    const visibleShortcuts = shouldCollapse && !isQuickLinksExpanded
+        ? sortedShortcuts.slice(0, MAX_VISIBLE_SHORTCUTS - 1) // 마지막 자리는 '더 보기' 버튼을 위해 비워둡니다.
+        : sortedShortcuts;
+
+    // 🟢 [적용] 현재 메모 개수에 따른 레이아웃 설정 가져오기
+    const memoLayout = getMemoLayoutSettings(infoWidgets.length);
 
     const getFaviconUrl = (url) => {
         try {
@@ -305,79 +422,220 @@ const DashboardView = ({
     };
 
     return (
-        <div className="animate-fade-in pb-10">
+        <div className="animate-fade-in pb-10" onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd} onDoubleClick={handleDragModeExit}>
             <div className="flex justify-between items-center mb-4 px-1">
                 <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Dashboard Overview</h2>
-                <div className="flex gap-2"><span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">💡 위젯을 드래그하여 정렬 순서를 변경할 수 있습니다.</span><button onClick={() => setShowSettingsModal(true)} className="text-[10px] text-zinc-500 hover:text-zinc-800 flex items-center gap-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors"><Settings size={15} /></button></div>
+                <div className="flex gap-2">
+                    {/* 🌟 [추가]: 드래그 모드 안내 */}
+                    {isDraggingMode ? (
+                        <span className="text-[10px] text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-1 rounded-full animate-pulse font-bold">🗑️ 드래그 모드: 순서 변경/X버튼으로 삭제 (더블클릭 해제)</span>
+                    ) : (
+                        <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full">💡 위젯을 드래그하여 정렬 순서를 변경할 수 있습니다.</span>
+                    )}
+                    <button onClick={() => setShowSettingsModal(true)} className="text-[10px] text-zinc-500 hover:text-zinc-800 flex items-center gap-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-colors"><Settings size={15} /></button>
+                </div>
             </div>
+
+            {/* 1. 바로가기 링크 (상단 분리) */}
             {shortcuts.length > 0 && (
                 <div className="mb-6">
                     <h3 className="text-xs font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Quick Links</h3>
-                    <div className="flex flex-wrap gap-4 animate-fade-in-down">
-                        {/* 🟢 [수정됨] key={widget.id} -> key={`${widget.id}-${index}`} 로 변경하여 중복 키 에러 방지 */}
-                        {shortcuts.map((widget, index) => {
+                    {/* 🌟 [핵심 수정]: flex 컨테이너에 transition-all 추가 */}
+                    <div className="flex flex-wrap gap-4 animate-fade-in-down transition-all duration-300">
+
+                        {visibleShortcuts.map((widget, index) => {
                             const favicon = getFaviconUrl(widget.url);
+                            const isLocalFile = !widget.url.startsWith('http');
+                            const useBase64Icon = !!widget.finalIcon;
+                            const isBeingDragged = draggedItem === widget.id; // 🌟 드래그 중인 아이템 식별
+
+                            // 🌟 [애니메이션 로직]:
+                            const animationStyle = {
+                                // 1. 평소/펼친 상태 모두 정자세(0deg). '펼칠 때' (false->true) 이 0deg로 부드럽게 transition 됨.
+                                transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`, 
+                                transition: 'transform 0.3s ease-out',
+                                transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms'
+                            };
+                             
+                             // 🌟 [숨겨진 트릭]: 펼쳐질 때 회전 애니메이션 적용
+                             // isQuickLinksExpanded가 false(접힘)일 때 임시로 회전 각도를 가지도록 합니다.
+                             // isQuickLinksExpanded가 true가 되면 0deg로 돌아오면서 애니메이션이 보입니다.
+                             // **주의: 이 로직은 Tailwind.config에 transition-property: transform이 정의되어 있어야 동작합니다.**
+                             // Tailwind가 없는 환경에서는 추가 CSS가 필요합니다.
+                             const initialRotation = isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(${index * 15}deg)`;
+
+
+                            // 🌟 [D&D 속성]
+                            const draggableProps = isDraggingMode ? {
+                                draggable: true,
+                                onDragStart: (e) => onShortcutDragStart(e, widget.id),
+                                onDragEnd: onShortcutDragEnd,
+                                onDragOver: (e) => onShortcutDragOver(e, widget.id),
+                            } : {};
+
                             return (
-                                <div key={`${widget.id}-${index}`} className="group relative flex flex-col items-center gap-2">
+                                <div
+                                    key={widget.id} // 🌟 key는 widget.id로 유지되어야 합니다.
+                                    className={`group relative flex flex-col items-center gap-2 transform transition-all duration-300 ${draggableProps.className} ${isBeingDragged ? 'opacity-0' : ''}`}
+                                    {...draggableProps} // 🌟 드래그 속성 적용
+                                    onDoubleClick={handleDragModeExit} // 더블클릭으로 모드 해제
+                                >
                                     <button
-                                        onClick={() => window.open(widget.url, '_blank')}
-                                        className="w-16 h-16 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center justify-center transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 group-hover:ring-2 group-hover:ring-indigo-500/20"
+                                        onClick={() => {
+                                            if (isDraggingMode) return;
+                                            if (isLocalFile) {
+                                                window.require('electron').ipcRenderer.send('open-path', widget.url);
+                                            } else {
+                                                window.open(widget.url, '_blank');
+                                            }
+                                        }}
+                                        onMouseDown={handlePressStart(widget.id)} // 🌟 길게 누르기 시작
+                                        onMouseUp={handlePressEnd} // 🌟 길게 누르기 끝
+                                        onMouseLeave={handlePressEnd}
+
+                                        // 🌟 [최종 애니메이션 스타일]: 평소/펼침 상태는 정자세, 펼칠 때 애니메이션
+                                        className={`w-16 h-16 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center justify-center transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 group-hover:ring-2 group-hover:ring-indigo-500/20 ${isDraggingMode ? 'shake-mode' : ''}`}
+                                        style={{
+                                            transition: 'transform 0.3s ease-out',
+                                            transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms',
+                                            transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`, 
+                                        }}
                                     >
-                                        {favicon ? (
-                                            <img src={favicon} alt={widget.title} className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" />
+                                        {/* Base64 아이콘 렌더링 로직 (유지) */}
+                                        {useBase64Icon ? (
+                                            <img
+                                                src={widget.finalIcon} 
+                                                alt={widget.title}
+                                                className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+                                            />
+                                        ) : favicon ? (
+                                            <img
+                                                src={favicon}
+                                                alt={widget.title}
+                                                className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+                                            />
                                         ) : (
-                                            <ExternalLink size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                            isLocalFile ? (
+                                                <Building2 size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                            ) : (
+                                                <ExternalLink size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                            )
                                         )}
                                     </button>
 
-                                    <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">
+                                    <span className={`text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors ${!isQuickLinksExpanded && shouldCollapse && index >= MAX_VISIBLE_SHORTCUTS - 1 ? 'opacity-0 h-0 overflow-hidden' : ''}`}>
                                         {widget.title}
                                     </span>
 
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteWidget(widget.id); }}
-                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm hover:bg-rose-600 hover:scale-110 z-20"
-                                        title="삭제"
+                                    {/* 🌟 [수정]: 드래그 모드일 때만 삭제 버튼 표시 */}
+                                    {isDraggingMode && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteWidget(widget.id); }}
+                                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center transition-all shadow-sm hover:bg-rose-600 hover:scale-110 z-20"
+                                            title="삭제"
+                                        >
+                                            <span className="text-xs font-bold leading-none mb-0.5">×</span>
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* 🟢 [추가] '더 보기' 버튼 */}
+                        {shouldCollapse && (
+                            <div className="group relative flex flex-col items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        if (isDraggingMode) {
+                                            handleDragModeExit();
+                                        } else {
+                                            setIsQuickLinksExpanded(prev => !prev);
+                                        }
+                                    }}
+                                    className={`w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all duration-300 ${isQuickLinksExpanded ? 'border-indigo-500 bg-indigo-50/20 text-indigo-500 rotate-180' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-500 hover:border-indigo-500'}`}
+                                    title={isQuickLinksExpanded ? "접기" : `${shortcuts.length - visibleShortcuts.length}개 더 보기`}
+                                >
+                                    {isQuickLinksExpanded ? (
+                                        <X size={20} />
+                                    ) : (
+                                        <div className="text-lg font-bold">...</div>
+                                    )}
+                                </button>
+                                <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">
+                                    {isQuickLinksExpanded ? '접기' : '더 보기'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* 2. 메인 그리드 (유지) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-[80px] grid-flow-dense pb-20">
+                {/* ... (메인 그리드 위젯 로직 유지) ... */}
+                {infoWidgets.length > 0 && (
+                    <div
+                        className={`${memoLayout.className} grid ${memoLayout.grid} animate-fade-in`}
+                        style={memoLayout.style}
+                    >
+                        {infoWidgets.map((widget, index) => {
+                            const isAlarm = !!widget.targetTime;
+                            const Icon = isAlarm ? Clock : StickyNote;
+                            const accentColor = isAlarm ? 'rose' : (widget.color || 'zinc');
+
+                            const isCompact = infoWidgets.length > 1 && infoWidgets.length % 2 !== 0;
+
+                            return (
+                                <div key={`memo-${widget.id}-${index}`} className="relative group h-full overflow-hidden">
+                                    <ModernCard
+                                        title={isAlarm ? "알림" : widget.title}
+                                        icon={Icon}
+                                        accentColor={accentColor}
+                                        className={`h-full ${isCompact ? '!px-3 !py-1.5' : ''}`}
                                     >
-                                        <span className="text-xs font-bold leading-none mb-0.5">×</span>
+                                        <div className={`flex flex-col h-full justify-between ${isCompact ? 'gap-0' : 'gap-2'}`}>
+                                            <div className="flex-1 flex items-center justify-center min-h-0">
+                                                <div className={`font-bold text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap text-center px-1 break-keep leading-tight overflow-hidden ${isCompact ? 'text-[11px] line-clamp-2' : 'text-sm'}`}>
+                                                    {widget.content}
+                                                </div>
+                                            </div>
+                                            {isAlarm && (
+                                                <div className="flex justify-center border-t border-zinc-100 dark:border-zinc-800/50 mt-auto pt-2">
+                                                    <span className="text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-1.5 py-0 rounded-full flex items-center gap-1">
+                                                        <Clock size={8} /> {widget.targetTime}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </ModernCard>
+
+                                    <button
+                                        onClick={() => handleDeleteWidget(widget.id)}
+                                        className={`absolute right-2 bg-zinc-100 hover:bg-rose-500 hover:text-white text-zinc-400 rounded-full opacity-0 group-hover:opacity-100 transition-all ${isCompact ? 'top-1.5 p-1' : 'top-2 p-1.5'}`}
+                                    >
+                                        <Trash2 size={isCompact ? 10 : 12} />
                                     </button>
                                 </div>
                             );
                         })}
                     </div>
-                </div>
-            )}
+                )}
 
-            {infoWidgets.length > 0 && (
-                <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down">
-                    {/* 🟢 [수정됨] key={widget.id} -> key={`${widget.id}-${index}`} 로 변경 */}
-                    {infoWidgets.map((widget, index) => (
-                        <div key={`${widget.id}-${index}`} className="relative group">
-                            <ModernCard
-                                title={widget.title}
-                                icon={Sparkles}
-                                accentColor={widget.color}
-                            >
-                                <div className="flex flex-col h-full justify-center">
-                                    <div className="text-lg font-bold text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap text-center px-2">
-                                        {widget.content}
-                                    </div>
-                                </div>
-                            </ModernCard>
-                            <button
-                                onClick={() => handleDeleteWidget(widget.id)}
-                                className="absolute top-2 right-2 p-1.5 bg-zinc-100 hover:bg-rose-500 hover:text-white text-zinc-400 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                            >
-                                <Trash size={12} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-            <div className="grid grid-cols-2 gap-4 auto-rows-[80px] grid-flow-dense">
+                {/* B. 메인 위젯들 - 메모 아래로 이동됨 (유지) */}
                 {widgetOrder.filter(key => { if (key === 'tasks') return visibleModules.schedule; return visibleModules[key]; }).map((widgetKey, index) => (
-                    <div key={widgetKey} draggable onDragStart={(e) => onDragStart(e, index)} onDragEnter={(e) => onDragOver(e, index)} onDragEnd={onDragEnd} onDragOver={(e) => e.preventDefault()} className={`${getWidgetSpan(widgetKey)} cursor-move transition-transform active:scale-[0.99]`}>{widgetComponents[widgetKey]}</div>
+                    <div
+                        key={widgetKey}
+                        draggable
+                        onDragStart={(e) => onDragStart(e, index)}
+                        onDragEnter={(e) => onDragOver(e, index)}
+                        onDragEnd={onDragEnd}
+                        onDragOver={(e) => e.preventDefault()}
+                        className={`${getWidgetSpan(widgetKey)} cursor-move transition-transform active:scale-[0.99]`}
+                    >
+                        {widgetComponents[widgetKey]}
+                    </div>
                 ))}
+
             </div>
 
             <ConfirmModal

@@ -1,4 +1,4 @@
-﻿/* Last Updated: 2025-12-17 03:30:09 */
+﻿/* Last Updated: 2025-12-18 17:50:21 */
 /* [index.css] - 프리텐다드(Pretendard) 폰트 적용 */
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 
@@ -57,3 +57,38 @@ html, body {
 /* 스크롤바 숨김 유틸리티 */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes shake {
+    0% { transform: translate(1px, 1px) rotate(0deg); }
+    10% { transform: translate(-1px, -2px) rotate(-0.5deg); }
+    20% { transform: translate(-3px, 0px) rotate(0.5deg); }
+    30% { transform: translate(3px, 2px) rotate(0deg); }
+    40% { transform: translate(1px, -1px) rotate(0.5deg); }
+    50% { transform: translate(-1px, 2px) rotate(-0.5deg); }
+    60% { transform: translate(-3px, 1px) rotate(0deg); }
+    70% { transform: translate(3px, 1px) rotate(-0.5deg); }
+    80% { transform: translate(-1px, -1px) rotate(0.5deg); }
+    90% { transform: translate(1px, 2px) rotate(0deg); }
+    100% { transform: translate(1px, -2px) rotate(-0.5deg); }
+}
+
+.shake-mode {
+    animation: shake 1.2s cubic-bezier(.36,.07,.49,.97) infinite;
+    backface-visibility: hidden;
+    perspective: 1000px;
+}
+
+.is-dragging {
+    /* 드래그 중인 아이콘이 튀어나와 보이도록 그림자/확대 효과 부여 */
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    transform: scale(1.05);
+}
+
+/* 글로벌 CSS 파일에 추가 */
+
+.flex-wrap > * {
+  /* order 속성의 변화를 감지하여 애니메이션을 적용하도록 설정 */
+  transition-property: order, opacity, transform, background-color, border-color, color, fill, stroke, box-shadow, filter, backdrop-filter;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

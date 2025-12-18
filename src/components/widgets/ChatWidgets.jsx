@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 03:30:09
+﻿// Last Updated: 2025-12-18 17:50:21
 import React, { useState } from 'react';
 import { Calendar as CalendarIcon, Wallet, Heart, BookOpen, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
@@ -112,7 +112,7 @@ export const MentalChatWidget = ({ data }) => {
 // 4. 학습 위젯 (리스트형)
 export const StudyChatWidget = ({ data }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    
+
     const calculateProgress = (node) => {
         if (!node || !node.children || node.children.length === 0) return node && node.done ? 100 : 0;
         const total = node.children.reduce((acc, child) => acc + calculateProgress(child), 0);
@@ -270,6 +270,63 @@ export const BookCoverFlowWidget = ({ tasks, onBookClick }) => {
                     <span className="text-[9px] font-bold text-emerald-600">{currentProgress}%</span>
                 </div>
             </div>
+        </div>
+    );
+};
+
+// src/components/widgets/ChatWidgets.jsx
+
+// src/components/widgets/ChatWidgets.jsx
+
+export const CustomDashboardChatWidget = ({ data }) => {
+    const memos = data.filter(w => w.type === 'card');
+    const links = data.filter(w => w.type === 'link');
+
+    return (
+        <div className="w-80 flex flex-col gap-4">
+            {/* 1. 메모/알람 섹션 */}
+            {memos.length > 0 && (
+                <div className="space-y-2.5">
+                    {memos.map(memo => {
+                        // 시간 정보가 있으면 알람으로 간주
+                        const isAlarm = !!memo.targetTime;
+                        
+                        return (
+                            <div key={memo.id} className={`p-3.5 rounded-2xl border shadow-sm transition-all ${
+                                isAlarm 
+                                ? 'bg-indigo-50/50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' 
+                                : 'bg-amber-50/50 border-amber-100 dark:bg-amber-900/20 dark:border-amber-800'
+                            }`}>
+                                <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${
+                                            isAlarm ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
+                                        }`}>
+                                            {isAlarm ? '⏰' : '📌'}
+                                        </span>
+                                        <span className={`text-xs font-bold ${
+                                            isAlarm ? 'text-indigo-900 dark:text-indigo-200' : 'text-amber-900 dark:text-amber-200'
+                                        }`}>
+                                            {memo.title}
+                                        </span>
+                                    </div>
+                                    {isAlarm && (
+                                        <span className="text-[10px] font-black px-2 py-0.5 bg-indigo-600 text-white rounded-full shadow-sm shadow-indigo-200">
+                                            {memo.targetTime}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed pl-1">
+                                    {memo.content}
+                                </p>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* 2. 링크 섹션 (기존 코드 유지) */}
+            {/* ... */}
         </div>
     );
 };

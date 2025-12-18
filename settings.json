@@ -59,14 +59,14 @@
   ],
   "dashboardWidgetOrder": [
     "mental",
-    "finance",
     "tasks",
+    "finance",
     "development",
     "work"
   ],
   "visibleModules": {
     "schedule": true,
-    "finance": false,
+    "finance": true,
     "mental": true,
     "development": true,
     "work": true

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 03:30:09
+﻿// Last Updated: 2025-12-18 17:50:21
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
@@ -403,4 +403,14 @@ ipcMain.handle('load-custom-widgets', () => loadData(DATA_PATHS.widgets, []));
 
 ipcMain.on('save-custom-widgets', (event, data) => {
     saveData(DATA_PATHS.widgets, data, 'widgets');
+});
+
+
+
+// 🟢 [추가] 파일 열기 요청 처리
+ipcMain.on('open-path', (event, path) => {
+  // shell.openPath는 파일이나 바로가기를 기본 프로그램으로 실행합니다.
+  shell.openPath(path).then((error) => {
+      if (error) console.error('Failed to open path:', error);
+  });
 });

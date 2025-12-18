@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-17 03:30:09
+﻿// Last Updated: 2025-12-18 17:50:21
 export const getSystemInstruction = ({
     currentDateInfo,
     todayShift,
@@ -73,6 +73,9 @@ export const getSystemInstruction = ({
           1. "Add shortcut to [Site name]" (e.g., "Google 바로가기 추가해줘")
           2. "Add widget for [Title] with [Content]" (e.g., "환율 정보 위젯 만들어줘")
           3. "Remove/Delete [Title] widget" (e.g., "구글 위젯 삭제해줘")
+          - If the user asks to "show", "see", or "check" their widgets/memos/links (e.g., "Show my memos", "내 메모들 보여줘").
+          - **ACTION: "show_dashboard_widgets"**.
+          - Set "widgetType" to "card", "link", or "all" based on the request.
         
         - **Actions**:
           - To Add: "create_dashboard_widget"
@@ -129,6 +132,7 @@ export const getSystemInstruction = ({
         { "action": "add_equipment_log", "equipId": number|null, "content": "string", "date": "YYYY-MM-DD" }
         { "action": "create_dashboard_widget", "widgetType": "card", "title": "string", "content": "string", "url": "string", "color": "string" }
         { "action": "delete_dashboard_widget", "title": "string" }
+        { "action": "show_dashboard_widgets", "widgetType": "card"|"link"|"all" }
         
         IMPORTANT: If multiple actions needed, return a JSON ARRAY.
     `;
