@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-18 17:50:21
+﻿// Last Updated: 2025-12-21 10:13:28
 // DashboardView.jsx
 
 import React, { useState, useRef, useEffect } from 'react'; // 🌟 useRef, useEffect 추가
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { BookCoverFlowWidget } from '../components/widgets/ChatWidgets';
+
 
 const { ipcRenderer } = window.require('electron');
 
@@ -138,18 +139,20 @@ const DashboardView = ({
     // -----------------------------------------------------
     // 🌟 [상태 및 레퍼런스]
     const [isMentalAnalyzing, setIsMentalAnalyzing] = useState(false);
-    const [isDraggingMode, setIsDraggingMode] = useState(false); 
-    const longPressTimer = useRef(null); 
+    const [isDraggingMode, setIsDraggingMode] = useState(false);
+    const longPressTimer = useRef(null);
     // -----------------------------------------------------
-    
+
     const visibleModules = settings.visibleModules || { schedule: true, finance: true, mental: true, development: true, work: true };
     const [widgetOrder, setWidgetOrder] = useState(settings.dashboardWidgetOrder || ['mental', 'tasks', 'finance', 'development', 'work']);
-    const [draggedItem, setDraggedItem] = useState(null); 
+    const [draggedItem, setDraggedItem] = useState(null);
     const [isQuickLinksExpanded, setIsQuickLinksExpanded] = useState(false);
+
+
 
     const shortcuts = customWidgets.filter(w => w.type === 'link' || w.url);
     const infoWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
-    
+
     // 🌟 [Quick Link 순서 관리]
     const [quickLinkOrder, setQuickLinkOrder] = useState(shortcuts.map(w => w.id));
 
@@ -157,71 +160,85 @@ const DashboardView = ({
         // customWidgets가 변경될 때 (추가/삭제), quickLinkOrder를 재설정
         const currentIds = shortcuts.map(w => w.id);
         if (currentIds.length !== quickLinkOrder.length || currentIds.some(id => !quickLinkOrder.includes(id))) {
-             setQuickLinkOrder(currentIds);
+            setQuickLinkOrder(currentIds);
         }
     }, [shortcuts.length, customWidgets]);
-    
+
     // 🌟 [Quick Links 순서 저장]
     const saveQuickLinksOrder = (newOrder) => {
-        const orderedWidgets = newOrder.map(id => customWidgets.find(w => w.id === id)).filter(Boolean);
-        setCustomWidgets(orderedWidgets);
+        // 현재 링크 타입이 아닌 위젯(메모 등)들만 따로 보관
+        const otherWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
+
+        // 새로운 순서에 맞춰 링크 위젯들 재배열
+        const orderedLinks = newOrder
+            .map(id => customWidgets.find(w => w.id === id))
+            .filter(Boolean);
+
+        // 메모 + 정렬된 링크를 합쳐서 전체 상태 업데이트 (데이터 보존)
+        const finalWidgets = [...otherWidgets, ...orderedLinks];
+        setCustomWidgets(finalWidgets);
         setQuickLinkOrder(newOrder);
+
+        // Electron 저장 (필요 시)
+        if (window.require) {
+            window.require('electron').ipcRenderer.send('save-custom-widgets', finalWidgets);
+        }
     };
-    
-    // Quick Links 드래그 앤 드롭 핸들러
+
+    // 2. [수정] 드래그 시작 시 고스트 이미지 문제 해결
     const onShortcutDragStart = (e, id) => {
-        if (!isDraggingMode) { e.preventDefault(); return; }
-        e.dataTransfer.setData("widgetId", id);
+        // 꾹 누르지 않고 그냥 드래그하면 취소 (실수 방지)
+        if (!isDraggingMode) {
+            e.preventDefault();
+            return;
+        }
 
-        // 🌟 [수정]: draggedItem 상태 업데이트
-        setDraggedItem(id); 
+        setDraggedItem(id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", id); // 드래그 데이터 보장
 
-        // 🌟 [수정]: 드래그 고스트 이미지용 임시 스타일
-        const target = e.currentTarget;
-        const dragIcon = target.cloneNode(true);
-        dragIcon.style.opacity = 0.5;
-        dragIcon.style.position = 'absolute';
-        dragIcon.style.top = '-1000px'; 
-        document.body.appendChild(dragIcon);
-        e.dataTransfer.setDragImage(dragIcon, target.offsetWidth / 2, target.offsetHeight / 2);
-        setTimeout(() => document.body.removeChild(dragIcon), 0);
-        
-        // e.currentTarget.classList.add('is-dragging'); // is-dragging은 opacity-0으로 대체
+        // 🌟 [핵심]: pointer-events: none을 제거해야 마우스를 잘 따라옵니다.
+        // 대신 투명도만 조절합니다.
+        setTimeout(() => {
+            if (e.target) e.target.classList.add('opacity-20');
+        }, 0);
     };
-    
+
+    const onShortcutDragOver = (e, targetId) => {
+        e.preventDefault(); // 필수
+        const draggedId = draggedItem;
+
+        if (!draggedId || draggedId === targetId) return;
+
+        setQuickLinkOrder(prevOrder => {
+            const draggedIndex = prevOrder.indexOf(draggedId);
+            const targetIndex = prevOrder.indexOf(targetId);
+
+            if (draggedIndex === -1 || targetIndex === -1) return prevOrder;
+
+            const newOrder = [...prevOrder];
+            newOrder.splice(draggedIndex, 1);
+            newOrder.splice(targetIndex, 0, draggedId);
+            return newOrder; // 이 리턴이 화면을 실시간으로 다시 그리며 아이콘을 밀어냅니다.
+        });
+    };
+
+    // 3. [수정] 드래그 종료 시 pointer-events 복구
     const onShortcutDragEnd = (e) => {
-        // e.currentTarget.style.opacity = '1'; // opacity는 isBeingDragged에 의해 관리
-        setDraggedItem(null); 
-        // e.currentTarget.classList.remove('is-dragging');
+        if (e.target) e.target.classList.remove('opacity-20');
+        setDraggedItem(null);
         saveQuickLinksOrder(quickLinkOrder);
     };
-    
-    const onShortcutDragOver = (e, targetId) => {
-        e.preventDefault();
-        const draggedId = e.dataTransfer.getData("widgetId");
-        const draggedIndex = quickLinkOrder.indexOf(draggedId);
-        const targetIndex = quickLinkOrder.indexOf(targetId);
-        
-        if (draggedIndex === -1 || targetIndex === -1 || draggedId === targetId) return;
-        
-        const newOrder = [...quickLinkOrder];
-        newOrder.splice(draggedIndex, 1);
-        newOrder.splice(targetIndex, 0, draggedId);
-        
-        setQuickLinkOrder(newOrder); // 🌟 상태를 업데이트하여 애니메이션 트리거
-    };
-    
+
     // 🌟 [길게 누르기 감지 로직]
     const handlePressStart = (id) => (e) => {
-        if (e.button !== 0) return; 
-        if (isDraggingMode) return; 
-        
+        if (e.button !== 0) return;
+        if (isDraggingMode) return;
         longPressTimer.current = setTimeout(() => {
             setIsDraggingMode(true);
             longPressTimer.current = null;
-        }, 3000); 
+        }, 1000); // 0.5초만 눌러도 드래그 가능
     };
-
     const handlePressEnd = () => {
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
@@ -452,17 +469,17 @@ const DashboardView = ({
                             // 🌟 [애니메이션 로직]:
                             const animationStyle = {
                                 // 1. 평소/펼친 상태 모두 정자세(0deg). '펼칠 때' (false->true) 이 0deg로 부드럽게 transition 됨.
-                                transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`, 
+                                transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`,
                                 transition: 'transform 0.3s ease-out',
                                 transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms'
                             };
-                             
-                             // 🌟 [숨겨진 트릭]: 펼쳐질 때 회전 애니메이션 적용
-                             // isQuickLinksExpanded가 false(접힘)일 때 임시로 회전 각도를 가지도록 합니다.
-                             // isQuickLinksExpanded가 true가 되면 0deg로 돌아오면서 애니메이션이 보입니다.
-                             // **주의: 이 로직은 Tailwind.config에 transition-property: transform이 정의되어 있어야 동작합니다.**
-                             // Tailwind가 없는 환경에서는 추가 CSS가 필요합니다.
-                             const initialRotation = isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(${index * 15}deg)`;
+
+                            // 🌟 [숨겨진 트릭]: 펼쳐질 때 회전 애니메이션 적용
+                            // isQuickLinksExpanded가 false(접힘)일 때 임시로 회전 각도를 가지도록 합니다.
+                            // isQuickLinksExpanded가 true가 되면 0deg로 돌아오면서 애니메이션이 보입니다.
+                            // **주의: 이 로직은 Tailwind.config에 transition-property: transform이 정의되어 있어야 동작합니다.**
+                            // Tailwind가 없는 환경에서는 추가 CSS가 필요합니다.
+                            const initialRotation = isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(${index * 15}deg)`;
 
 
                             // 🌟 [D&D 속성]
@@ -498,13 +515,13 @@ const DashboardView = ({
                                         style={{
                                             transition: 'transform 0.3s ease-out',
                                             transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms',
-                                            transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`, 
+                                            transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`,
                                         }}
                                     >
                                         {/* Base64 아이콘 렌더링 로직 (유지) */}
                                         {useBase64Icon ? (
                                             <img
-                                                src={widget.finalIcon} 
+                                                src={widget.finalIcon}
                                                 alt={widget.title}
                                                 className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
                                             />

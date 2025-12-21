@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-18 17:50:21
+﻿// Last Updated: 2025-12-21 10:13:28
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Sparkles, Send, Trash2, BookOpen, Heart, Bot, AlertTriangle } from 'lucide-react';

@@ -179,16 +179,6 @@
     "category": "work"
   },
   {
-    "id": 1765908067164.3672,
-    "text": "CHP 기동",
-    "date": "2025-12-16",
-    "startTime": "06:10",
-    "endTime": "07:10",
-    "done": false,
-    "memo": "",
-    "category": "work"
-  },
-  {
     "id": 1765908869836.9907,
     "text": "PT",
     "date": "2025-12-16",
@@ -207,5 +197,35 @@
     "done": false,
     "memo": "",
     "category": "health"
+  },
+  {
+    "id": 1766137824921.7473,
+    "text": "PT",
+    "date": "2025-12-24",
+    "startTime": "13:00",
+    "endTime": "14:00",
+    "done": false,
+    "memo": "",
+    "category": "health"
+  },
+  {
+    "id": 1766137824969.786,
+    "text": "PT",
+    "date": "2025-12-26",
+    "startTime": "14:00",
+    "endTime": "15:00",
+    "done": false,
+    "memo": "",
+    "category": "health"
+  },
+  {
+    "id": 1766138104451.3376,
+    "text": "청라 돈돈집",
+    "date": "2025-12-22",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "done": false,
+    "memo": "",
+    "category": "personal"
   }
 ]

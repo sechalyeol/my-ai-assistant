@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-18 17:50:21
+﻿// Last Updated: 2025-12-21 10:13:28
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -431,8 +431,25 @@ function App() {
                     replyText = `일정 수정 완료`;
                 }
                 else if (action === 'delete_todo') {
-                    setTodos(prev => { const nextTodos = prev.filter(t => t.id !== command.id); ipcRenderer.send('save-schedules', nextTodos); return nextTodos; });
-                    replyText = `일정 삭제 완료`;
+                    // 1. 안전한 비교를 위해 ID를 문자열로 변환
+                    const targetId = String(command.id);
+                    
+                    // 2. 삭제 대상이 실제로 존재하는지 확인
+                    const targetTodo = todos.find(t => String(t.id) === targetId);
+
+                    if (targetTodo) {
+                        setTodos(prev => {
+                            // ID가 일치하지 않는 것만 남김 (삭제)
+                            const nextTodos = prev.filter(t => String(t.id) !== targetId);
+                            ipcRenderer.send('save-schedules', nextTodos);
+                            return nextTodos;
+                        });
+                        replyText = `🗑️ 일정을 삭제했습니다: "${targetTodo.text}"`;
+                    } else {
+                        // 3. 대상을 못 찾았을 경우 에러 메시지 출력
+                        replyText = `⚠️ 삭제할 일정을 찾을 수 없습니다. (ID 불일치)`;
+                        console.warn(`[Delete Failed] Requested ID: ${command.id}, Available IDs:`, todos.map(t => t.id));
+                    }
                 }
                 else if (action === 'search_books' && command.results) {
                     setDev(prev => ({ ...prev, searchResults: command.results }));
@@ -677,7 +694,18 @@ function App() {
                                         {!isSidebarExpanded && (settings.visibleModules?.finance || settings.visibleModules?.mental) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
                                         {(settings.visibleModules?.finance || settings.visibleModules?.mental) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-indigo-500/70 dark:text-indigo-400/70 mb-2 px-2 mt-4">Personal Life</h3>}<div className="space-y-1">{settings.visibleModules?.finance && <SideBarItem icon={Wallet} label="자산관리" active={dashboardSubView === 'finance'} onClick={() => setDashboardSubView('finance')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.mental && <SideBarItem icon={Heart} label="멘탈관리" active={dashboardSubView === 'mental'} onClick={() => setDashboardSubView('mental')} isExpanded={isSidebarExpanded} />}</div></div>)}
                                         {!isSidebarExpanded && (settings.visibleModules?.development || settings.visibleModules?.work) && <div className="h-px w-8 bg-zinc-200 dark:bg-zinc-800 mx-auto my-2"></div>}
-                                        {(settings.visibleModules?.development || settings.visibleModules?.work) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/70 dark:text-emerald-400/70 mb-2 px-2 mt-4">Work & Growth</h3>}<div className="space-y-1">{settings.visibleModules?.development && <SideBarItem icon={BookOpen} label="자기개발" active={dashboardSubView === 'development'} onClick={() => setDashboardSubView('development')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.work && <SideBarItem icon={Briefcase} label="직무교육" active={dashboardSubView === 'work'} onClick={() => setDashboardSubView('work')} isExpanded={isSidebarExpanded} />}</div></div>)}
+                                        {(settings.visibleModules?.development || settings.visibleModules?.work) && (<div className="w-full">{isSidebarExpanded && <h3 className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/70 dark:text-emerald-400/70 mb-2 px-2 mt-4">Work & Growth</h3>}<div className="space-y-1">{settings.visibleModules?.development && <SideBarItem icon={BookOpen} label="자기개발" active={dashboardSubView === 'development'} onClick={() => setDashboardSubView('development')} isExpanded={isSidebarExpanded} />}{settings.visibleModules?.work && (
+                                            <SideBarItem
+                                                icon={Briefcase}
+                                                label="직무교육"
+                                                active={dashboardSubView === 'work'}
+                                                onClick={() => {
+                                                    setDashboardSubView('work');
+                                                    setWorkViewMode('HOME'); // 🌟 클릭 시 'HOME'으로 강제 초기화 추가
+                                                }}
+                                                isExpanded={isSidebarExpanded}
+                                            />
+                                        )}</div></div>)}
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950/80">{renderSubView()}</div>

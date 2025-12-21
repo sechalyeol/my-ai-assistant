@@ -310,7 +310,7 @@
     {
       "id": "FIELD SAFETY",
       "label": "⛑️ 현장/안전",
-      "color": "rose",
+      "color": "emerald",
       "group": "COMMON"
     },
     {
@@ -327,7 +327,7 @@
     {
       "id": "PROGRAM MANUALS",
       "label": "🖱️ 프로그램 사용",
-      "color": "fuchsia"
+      "color": "blue"
     }
   ]
 }

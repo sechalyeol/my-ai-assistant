@@ -11,7 +11,7 @@
       "meta": {
         "code": "EQ-000",
         "maker": "제조사 미정",
-        "installDate": "2025-12-15",
+        "installDate": "2025-12-19",
         "location": "현장",
         "system": "급수 계통"
       }
@@ -27,9 +27,9 @@
       "meta": {
         "code": "EQ-000",
         "maker": "제조사 미정",
-        "installDate": "2025-12-18",
+        "installDate": "2025-12-19",
         "location": "현장",
-        "system": "냉각계통"
+        "system": "냉각 계통"
       }
     },
     {
@@ -45,7 +45,25 @@
         "maker": "제조사 미정",
         "installDate": "2025-12-18",
         "location": "현장",
-        "system": "냉각계통"
+        "system": "냉각 계통"
+      },
+      "specs": []
+    },
+    {
+      "id": 1766133686641,
+      "title": "Air Compressor",
+      "desc": "",
+      "chapters": [],
+      "documents": [],
+      "logs": [],
+      "parts": [],
+      "specs": [],
+      "meta": {
+        "code": "EQ-000",
+        "maker": "미지정",
+        "system": "압축공기 계통",
+        "location": "현장",
+        "installDate": "2025-12-19"
       }
     }
   ],

@@ -1,16 +1,67 @@
-﻿// Last Updated: 2025-12-18 17:50:21
+﻿// Last Updated: 2025-12-21 10:13:28
 import React, { useState, useRef, useEffect } from 'react';
 import {
     Briefcase, BookOpen, Wrench, AlertTriangle, ChevronRight, Plus, Edit3, Trash2,
     ChevronLeft, FileText, Image, ArrowRight, Menu, History, Bot, Lock, Zap,
     AlertCircle, X, Download, Upload, PanelRightClose, PanelRightOpen, GripVertical,
-    Check, Folder, Layers, LayoutGrid, FileCode, ChevronDown // <--- 여기에 추가해주세요!
+    Check, Folder, Layers, LayoutGrid, FileCode, ChevronDown, Filter
 } from 'lucide-react';
 import PanZoomViewer from '../components/ui/PanZoomViewer';
 
 const { ipcRenderer } = window.require('electron');
 
-const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMessage, viewMode, setViewMode }) => {
+const WorkDetailView = ({
+    work,
+    setWork,
+    equipment,       // 🌟 App.jsx에서 보내준 equipment를 직접 받음
+    setEquipment,    // 🌟 App.jsx에서 보내준 setEquipment를 직접 받음
+    viewMode = 'HOME', // 🌟 이름을 viewMode로 통일하고 기본값 설정
+    setViewMode,     // 🌟 이름을 setViewMode로 통일
+    handleSendMessage // 🌟 채팅 기능을 위해 필요하다면 추가
+}) => {
+
+    const [loading, setLoading] = useState(!work || !work.manuals);
+
+    useEffect(() => {
+        const refreshData = async () => {
+            // 데이터가 비어있으면 다시 불러오기 시도
+            if (!work || !work.manuals || work.manuals.length === 0) {
+                setLoading(true);
+                try {
+                    const data = await window.require('electron').ipcRenderer.invoke('get-work-data');
+                    if (data) {
+                        setWork(data);
+                    }
+                } catch (err) {
+                    console.error("Work data fetch error:", err);
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setLoading(false);
+            }
+        };
+
+        refreshData();
+    }, [viewMode]); // 의존성 배열
+
+    if (loading) {
+        return <div className="flex items-center justify-center h-full text-zinc-400">데이터를 불러오는 중...</div>;
+    }
+
+    if (!work || !work.manuals || !work.categories) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-400">
+                <p>직무 교육 데이터를 불러올 수 없습니다.</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"
+                >
+                    새로고침
+                </button>
+            </div>
+        );
+    }
 
     // --- 🏗️ 설비 마스터 전용 State ---
     const [activeEquipId, setActiveEquipId] = useState(null);
@@ -53,8 +104,12 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
     const [equipCode, setEquipCode] = useState('');
     const [equipDesc, setEquipDesc] = useState('');
     const [equipSystem, setEquipSystem] = useState('');
+    const [equipMaker, setEquipMaker] = useState('');
+    const [originalSystemName, setOriginalSystemName] = useState('');
 
     const [isDirectSystem, setIsDirectSystem] = useState(false);
+    const [systemFilter, setSystemFilter] = useState('ALL');
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
     const currentEquip = activeEquipId ? (equipment.list || []).find(e => e.id === activeEquipId) : null;
 
     const [docType, setDocType] = useState('MANUAL');
@@ -145,16 +200,110 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         });
     };
 
+    const handleOpenEditEquip = () => {
+        const equip = (equipment.list || []).find(e => e.id === activeEquipId);
+        if (!equip) return;
+
+        setEquipTitle(equip.title);
+        setEquipCode(equip.meta?.code || '');
+        setEquipSystem(equip.meta?.system || '');
+        setEquipMaker(equip.meta?.maker || '');
+        setEquipDesc(equip.desc || '');
+        setModalConfig({ isOpen: true, type: 'EDIT_EQUIPMENT', title: '설비 정보 수정' });
+    };
+
+    // 🌟 [추가] 목록에서 설비 수정 버튼 클릭 시 호출
+    const handleEditEquipItem = (e, equip) => {
+        e.stopPropagation(); // 카드가 클릭되어 상세화면으로 넘어가는 것을 방지
+        setActiveEquipId(equip.id); // 현재 설비로 지정
+
+        setEquipTitle(equip.title);
+        setEquipCode(equip.meta?.code || '');
+        setEquipSystem(equip.meta?.system || '');
+        setEquipMaker(equip.meta?.maker || '');
+        setEquipDesc(equip.desc || '');
+
+        setModalConfig({ isOpen: true, type: 'EDIT_EQUIPMENT', title: '설비 정보 수정' });
+    };
+
+    // 🌟 [추가] 계통명 일괄 변경 핸들러
+    const handleRenameSystem = () => {
+        if (!equipSystem.trim()) {
+            safeAlert("변경할 계통 이름을 입력해주세요.");
+            return;
+        }
+        if (equipSystem === originalSystemName) {
+            setIsDirectSystem(false);
+            setOriginalSystemName('');
+            return;
+        }
+
+        safeConfirm(`'${originalSystemName}' 계통을 '${equipSystem}'(으)로 변경하시겠습니까?\n이 계통으로 등록된 모든 설비의 정보가 함께 수정됩니다.`, () => {
+            setEquipment(prev => ({
+                ...prev,
+                list: prev.list.map(e => {
+                    // 기존 계통명을 가진 모든 설비를 찾아서 새 이름으로 업데이트
+                    if (e.meta?.system === originalSystemName) {
+                        return { ...e, meta: { ...e.meta, system: equipSystem } };
+                    }
+                    return e;
+                })
+            }));
+            setOriginalSystemName('');
+            setIsDirectSystem(false);
+        });
+    };
+
+    // 🌟 [추가] 계통 입력 취소 핸들러
+    const handleCancelSystemInput = () => {
+        setIsDirectSystem(false);
+        if (originalSystemName) {
+            setEquipSystem(originalSystemName); // 원래 값으로 복구
+            setOriginalSystemName('');
+        } else {
+            setEquipSystem(''); // 신규 입력이었으면 초기화
+        }
+    };
+
     const handleSaveData = () => {
-        if (modalConfig.type === 'ADD_EQUIPMENT') {
+        // 1. 설비 등록 및 수정 로직 통합
+        if (modalConfig.type === 'ADD_EQUIPMENT' || modalConfig.type === 'EDIT_EQUIPMENT') {
             if (!equipTitle.trim()) return;
-            const newEquip = {
-                id: Date.now(), title: equipTitle, desc: equipDesc,
-                chapters: [], documents: [], logs: [], parts: [],
-                meta: { code: equipCode || 'EQ-000', maker: '제조사 미정', installDate: new Date().toISOString().split('T')[0], location: '현장', system: equipSystem || '공통 계통' }
+
+            // 공통 메타 데이터
+            const metaData = {
+                code: equipCode || 'EQ-000',
+                maker: equipMaker || '미지정',
+                system: equipSystem || '공통 계통',
+                location: '현장',
+                installDate: new Date().toISOString().split('T')[0] // 기존 날짜 유지 로직이 필요하다면 수정 필요
             };
-            setEquipment(prev => ({ ...prev, list: [...(prev.list || []), newEquip] }));
-            setEquipTitle(''); setEquipDesc(''); setEquipCode(''); setEquipSystem('');
+
+            if (modalConfig.type === 'ADD_EQUIPMENT') {
+                // 신규 등록
+                const newEquip = {
+                    id: Date.now(),
+                    title: equipTitle,
+                    desc: equipDesc,
+                    chapters: [], documents: [], logs: [], parts: [], specs: [], // specs 초기화 추가
+                    meta: metaData
+                };
+                setEquipment(prev => ({ ...prev, list: [...(prev.list || []), newEquip] }));
+            } else {
+                // 기존 수정
+                setEquipment(prev => ({
+                    ...prev,
+                    list: prev.list.map(e => e.id === activeEquipId ? {
+                        ...e,
+                        title: equipTitle,
+                        desc: equipDesc,
+                        meta: { ...e.meta, ...metaData } // 기존 meta 유지하며 덮어쓰기
+                    } : e)
+                }));
+            }
+
+            // 입력 폼 초기화
+            setEquipTitle(''); setEquipDesc(''); setEquipCode(''); setEquipSystem(''); setEquipMaker('');
             setIsDirectSystem(false);
         }
         else if (modalConfig.type === 'ADD_EQUIP_DOC') {
@@ -522,6 +671,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         const activeTab = equipTab === 'SYSTEM' ? 'SYSTEM' : 'FIELD';
         const equipList = equipment.list || [];
 
+        // 데이터 그룹화
         const groupedEquip = equipList.reduce((acc, equip) => {
             const sys = equip.meta?.system || '기타/공통 계통';
             if (!acc[sys]) acc[sys] = [];
@@ -529,11 +679,12 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
             return acc;
         }, {});
 
-        const systems = Object.keys(groupedEquip).sort();
+        const allSystems = Object.keys(groupedEquip).sort();
+        const displayedSystems = systemFilter === 'ALL' ? allSystems : [systemFilter];
 
         return (
             <div className="h-full flex flex-col bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm animate-fade-in relative overflow-hidden">
-                <div className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <div className="h-14 flex items-center justify-between px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0 z-40">
                     <div className="flex items-center gap-3"><button onClick={() => setViewMode('HOME')} className="hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 rounded text-zinc-500"><ChevronLeft size={20} /></button><h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">설비 마스터</h2></div>
                 </div>
                 <div className="flex-1 flex overflow-hidden">
@@ -542,56 +693,106 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
                         <div className="px-3 mt-4"><div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">설비 관리 (System)</div><button onClick={() => setEquipTab('SYSTEM')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'SYSTEM' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>전체 설비 계통도</button></div>
                     </div>
 
-                    <div className="flex-1 bg-white dark:bg-zinc-900 overflow-y-auto p-8">
+                    <div className="flex-1 bg-white dark:bg-zinc-900 overflow-y-auto relative scroll-smooth">
                         {activeTab === 'SYSTEM' && (
-                            <div className="max-w-5xl mx-auto pb-10">
-                                <div className="flex items-center justify-between mb-6 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                                    <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                                        <div className="w-1 h-4 bg-indigo-500"></div>전체 설비 계통 목록
-                                    </h3>
-                                    <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_EQUIPMENT', title: '설비 등록' })} className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"><Plus size={12} /> 설비 등록</button>
+                            <div className="max-w-5xl mx-auto pb-20">
+
+                                {/* 🌟 [수정 1] Main Header: mb-6 제거 (초기 간격 벌어짐 해결) */}
+                                <div className="sticky top-0 z-30 bg-white dark:bg-zinc-900 px-8 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shadow-sm">
+                                    <div className="flex items-center gap-6">
+                                        <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 whitespace-nowrap">
+                                            <div className="w-1 h-4 bg-indigo-500"></div>전체 설비 계통 목록
+                                        </h3>
+
+                                        {/* 커스텀 드롭다운 */}
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                                className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 rounded-lg py-1.5 px-3 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all shadow-sm active:scale-95"
+                                            >
+                                                <Filter size={12} className="text-indigo-500" />
+                                                <span>{systemFilter === 'ALL' ? `전체 보기 (${allSystems.length})` : systemFilter}</span>
+                                                <ChevronDown size={12} className={`text-zinc-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {isFilterOpen && (
+                                                <>
+                                                    <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsFilterOpen(false)}></div>
+                                                    <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in-down origin-top-left">
+                                                        <div className="max-h-64 overflow-y-auto p-1 scrollbar-hide">
+                                                            <button
+                                                                onClick={() => { setSystemFilter('ALL'); setIsFilterOpen(false); }}
+                                                                className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${systemFilter === 'ALL' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                                                            >
+                                                                <span>전체 보기</span>
+                                                                {systemFilter === 'ALL' && <Check size={12} />}
+                                                            </button>
+                                                            <div className="h-px bg-zinc-100 dark:bg-zinc-700/50 my-1"></div>
+                                                            {allSystems.map(sys => (
+                                                                <button
+                                                                    key={sys}
+                                                                    onClick={() => { setSystemFilter(sys); setIsFilterOpen(false); }}
+                                                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${systemFilter === sys ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 font-bold' : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                                                                >
+                                                                    <span>{sys}</span>
+                                                                    {systemFilter === sys && <Check size={12} />}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_EQUIPMENT', title: '설비 등록' })} className="text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md active:scale-95"><Plus size={14} /> 설비 등록</button>
                                 </div>
 
-                                {systems.length === 0 ? (
-                                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg bg-zinc-50/50"><p className="text-sm text-zinc-500">등록된 설비가 없습니다.</p></div>
-                                ) : (
-                                    <div className="space-y-8">
-                                        {systems.map(sys => (
-                                            <div key={sys}>
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <span className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded text-indigo-600 dark:text-indigo-400"><LayoutGrid size={14} /></span>
-                                                    <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-200">{sys}</h4>
-                                                    <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800"></div>
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {groupedEquip[sys].map(equip => (
-                                                        <div key={equip.id} onClick={() => { setActiveEquipId(equip.id); setActiveEquipDocId(null); setViewMode('EQUIP_DETAIL'); }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <span className="text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">{equip.meta?.code || 'EQ-000'}</span>
-                                                                <button
-                                                                    onClick={(e) => handleDeleteEquipment(e, equip.id, equip.title)}
-                                                                    className="p-1.5 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                                                                    title="설비 삭제"
-                                                                >
-                                                                    <Trash2 size={14} />
-                                                                </button>
+                                {/* 🌟 [수정 2] 콘텐츠 영역: pt-6 추가 (헤더와 첫 섹션 사이의 적절한 간격) */}
+                                <div className="px-8 pt-6">
+                                    {allSystems.length === 0 ? (
+                                        <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl bg-zinc-50/50"><p className="text-sm text-zinc-500 font-medium">등록된 설비가 없습니다.</p></div>
+                                    ) : (
+                                        // 🌟 [수정 3] space-y-8 제거 (마진 대신 패딩 사용을 위해)
+                                        <div className="flex flex-col">
+                                            {displayedSystems.map(sys => (
+                                                // 🌟 [수정 4] pb-12 추가: 섹션의 높이를 패딩으로 늘려서 스티키가 끊기지 않고 다음 섹션과 이어지게 함
+                                                <div key={sys} className="relative scroll-mt-[60px] pb-12">
+
+                                                    {/* 🌟 [수정 5] Section Header: top-[54px] (메인 헤더 높이 53px + 1px 여유) */}
+                                                    <div className="sticky top-[54px] z-20 bg-white dark:bg-zinc-900 py-2 mb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                                                        <span className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400 shadow-sm"><LayoutGrid size={14} /></span>
+                                                        <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{sys}</h4>
+                                                        <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full font-bold">{groupedEquip[sys].length}</span>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                        {groupedEquip[sys].map(equip => (
+                                                            <div key={equip.id} onClick={() => { setActiveEquipId(equip.id); setActiveEquipDocId(null); setViewMode('EQUIP_DETAIL'); }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <span className="text-[10px] font-bold font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-lg group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">{equip.meta?.code || 'EQ-000'}</span>
+                                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button onClick={(e) => handleEditEquipItem(e, equip)} className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="설비 수정"><Edit3 size={14} /></button>
+                                                                        <button onClick={(e) => handleDeleteEquipment(e, equip.id, equip.title)} className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-all" title="설비 삭제"><Trash2 size={14} /></button>
+                                                                    </div>
+                                                                </div>
+                                                                <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate mb-1 group-hover:text-indigo-600 transition-colors">{equip.title}</h4>
+                                                                <div className="flex items-center gap-3 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                                                                    <span className="text-[10px] font-medium text-zinc-500 flex items-center gap-1.5"><FileText size={12} className="text-zinc-400" /> Doc: {equip.documents?.length || 0}</span>
+                                                                    <span className="text-[10px] font-medium text-zinc-500 flex items-center gap-1.5"><Wrench size={12} className="text-zinc-400" /> Part: {equip.parts?.length || 0}</span>
+                                                                </div>
                                                             </div>
-                                                            <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate mb-1 group-hover:text-indigo-600 transition-colors">{equip.title}</h4>
-                                                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-50 dark:border-zinc-800">
-                                                                <span className="text-[10px] text-zinc-400 flex items-center gap-1"><FileText size={10} /> Doc: {equip.documents?.length || 0}</span>
-                                                                <span className="text-[10px] text-zinc-400 flex items-center gap-1"><Wrench size={10} /> Part: {equip.parts?.length || 0}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                         {activeTab === 'FIELD' && (
-                            <div className="max-w-4xl mx-auto space-y-10">
+                            <div className="max-w-4xl mx-auto space-y-10 px-8 pb-10 pt-8">
+                                {/* ... FIELD 탭 내용은 변경 사항 없음 ... */}
                                 <div>
                                     <div className="flex items-center justify-between mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2"><h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><div className="w-1 h-4 bg-emerald-500"></div>현장 기기 조작법 (Operation)</h3><button onClick={() => setModalConfig({ isOpen: true, type: 'ADD_FIELD_GUIDE', title: '기기 조작법 등록' })} className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 border border-zinc-200 px-2 py-1 rounded bg-white hover:bg-zinc-50"><Plus size={12} /> 등록</button></div>
                                     <div className="grid grid-cols-2 gap-3">{equipment.fieldGuides && equipment.fieldGuides.filter(g => g.type === 'OPERATION').map(g => (<div key={g.id} onClick={() => { setActiveFieldGuideId(g.id); setCurrentStepId(null); setIsDetailPanelOpen(false); setViewMode('FIELD_DETAIL'); }} className="group p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm cursor-pointer bg-white dark:bg-zinc-800 transition-all hover:-translate-y-0.5"><div className="flex justify-between items-start mb-1"><h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100">{g.title}</h4><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => handleEditFieldGuide(e, g)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-indigo-500"><Edit3 size={12} /></button><button onClick={(e) => handleDeleteFieldGuide(e, g.id)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-400 hover:text-rose-500"><Trash2 size={12} /></button></div></div><p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed h-8">{g.desc}</p><div className="mt-2 flex gap-1"><span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-bold">Standard</span>{g.steps && g.steps.length > 0 && <span className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 px-1.5 py-0.5 rounded">{g.steps.length}단계</span>}</div></div>))}</div>
@@ -701,7 +902,7 @@ const WorkDetailView = ({ work, setWork, equipment, setEquipment, handleSendMess
         );
     };
 
-const renderEquipDetail = () => {
+    const renderEquipDetail = () => {
         const equip = (equipment.list || []).find(e => e.id === activeEquipId);
         if (!equip) return <div className="flex items-center justify-center h-full text-zinc-400">데이터 로드 실패</div>;
 
@@ -737,7 +938,7 @@ const renderEquipDetail = () => {
                     {/* 좌측 목록 패널 */}
                     <div className={`flex-shrink-0 bg-zinc-50 dark:bg-zinc-900/50 border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-10 transition-all duration-300 overflow-hidden ${isEquipTocOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 border-none'}`}>
                         <div className="w-64 flex flex-col h-full overflow-y-auto">
-                             {/* 섹션 1: P&ID 도면 */}
+                            {/* 섹션 1: P&ID 도면 */}
                             <div className="p-3">
                                 <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 px-1 flex items-center gap-1"><FileCode size={10} /> P&ID Drawings</div>
                                 {pidDocs.length === 0 ? <div className="text-xs text-zinc-400 px-2 py-2 italic bg-zinc-100/50 dark:bg-zinc-800/50 rounded-lg">등록된 도면 없음</div> :
@@ -817,7 +1018,22 @@ const renderEquipDetail = () => {
                                 <div className="flex-1 overflow-y-auto p-5 space-y-8 bg-white dark:bg-zinc-900">
                                     {/* 1. 기본 정보 (General Info) */}
                                     <div>
-                                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-2"><Briefcase size={14} /> General Info</h3>
+                                        {/* 🌟 [수정] h3 태그 대신 div로 감싸고 flex justify-between 적용 */}
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                                                <Briefcase size={14} /> General Info
+                                            </h3>
+
+                                            {/* 수정 버튼 */}
+                                            <button
+                                                onClick={handleOpenEditEquip}
+                                                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-indigo-500 transition-colors"
+                                                title="설비 정보 수정"
+                                            >
+                                                <Edit3 size={14} />
+                                            </button>
+                                        </div>
+
                                         <div className="space-y-1 bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
                                             <div className="flex justify-between text-xs py-1 border-b border-zinc-100 dark:border-zinc-700/50 last:border-0"><span className="text-zinc-500 dark:text-zinc-400">계통</span><span className="font-bold text-indigo-600 dark:text-indigo-400">{equip.meta?.system || '공통'}</span></div>
                                             <div className="flex justify-between text-xs py-1 border-b border-zinc-100 dark:border-zinc-700/50 last:border-0"><span className="text-zinc-500 dark:text-zinc-400">설비 코드</span><span className="font-bold text-zinc-700 dark:text-zinc-200">{equip.meta?.code}</span></div>
@@ -899,7 +1115,7 @@ const renderEquipDetail = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
         );
     };
 
@@ -918,22 +1134,37 @@ const renderEquipDetail = () => {
                         <h3 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 mb-6 flex items-center gap-3"><div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-500"><Plus size={20} /></div> {modalConfig.title}</h3>
                         <div className="space-y-5">
                             {/* 설비 등록 */}
-                            {modalConfig.type === 'ADD_EQUIPMENT' && (
+                            {(modalConfig.type === 'ADD_EQUIPMENT' || modalConfig.type === 'EDIT_EQUIPMENT') && (
                                 <>
-                                    <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설비명</label><input autoFocus value={equipTitle} onChange={e => setEquipTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 가스터빈 1호기" /></div>
+                                    <div>
+                                        <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설비명</label>
+                                        <input autoFocus value={equipTitle} onChange={e => setEquipTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: 가스터빈 1호기" />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설비 코드</label><input value={equipCode} onChange={e => setEquipCode(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: GT-01" /></div>
-                                        {/* ▼ 소속 계통 입력 부분 (디자인 수정됨) ▼ */}
                                         <div>
-                                            <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">소속 계통</label>
-                                            {!isDirectSystem ? (
-                                                <div className="relative">
+                                            <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설비 코드</label>
+                                            <input value={equipCode} onChange={e => setEquipCode(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: GT-01" />
+                                        </div>
+                                        {/* 🌟 [디테일 복구] 제조사 입력 필드 추가 */}
+                                        <div>
+                                            <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">제조사</label>
+                                            <input value={equipMaker} onChange={e => setEquipMaker(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="예: Siemens" />
+                                        </div>
+                                    </div>
+
+                                    {/* 소속 계통 입력 부분 (기능 개선됨) */}
+                                    <div>
+                                        <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">소속 계통</label>
+                                        {!isDirectSystem ? (
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
                                                     <select
                                                         value={equipSystem}
                                                         onChange={(e) => {
                                                             if (e.target.value === 'DIRECT_INPUT') {
                                                                 setIsDirectSystem(true);
                                                                 setEquipSystem('');
+                                                                setOriginalSystemName(''); // 신규 입력이므로 원본 없음
                                                             } else {
                                                                 setEquipSystem(e.target.value);
                                                             }
@@ -941,36 +1172,63 @@ const renderEquipDetail = () => {
                                                         className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl pl-4 pr-10 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
                                                     >
                                                         <option value="">계통 선택</option>
-                                                        {/* 등록된 계통 목록 자동 추출 및 정렬 */}
                                                         {Array.from(new Set((equipment.list || []).map(e => e.meta?.system).filter(Boolean))).sort().map(sys => (
                                                             <option key={sys} value={sys}>{sys}</option>
                                                         ))}
                                                         <option value="DIRECT_INPUT" className="font-bold text-indigo-500 bg-indigo-50 dark:bg-zinc-700">+ 새 계통 직접 입력</option>
                                                     </select>
-                                                    {/* 커스텀 화살표 아이콘 추가 */}
                                                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={16} />
                                                 </div>
-                                            ) : (
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        autoFocus
-                                                        value={equipSystem}
-                                                        onChange={e => setEquipSystem(e.target.value)}
-                                                        className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
-                                                        placeholder="새 계통 명칭"
-                                                    />
+
+                                                {/* 🌟 수정 버튼: 누르면 원본 이름을 기억하고 입력 모드로 진입 */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (equipSystem) {
+                                                            setOriginalSystemName(equipSystem);
+                                                            setIsDirectSystem(true);
+                                                        }
+                                                    }}
+                                                    disabled={!equipSystem}
+                                                    className={`px-3 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-400 hover:text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${!equipSystem ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                    title="선택한 계통명 일괄 변경"
+                                                >
+                                                    <Edit3 size={18} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <input
+                                                    autoFocus
+                                                    value={equipSystem}
+                                                    onChange={e => setEquipSystem(e.target.value)}
+                                                    className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    placeholder={originalSystemName ? "변경할 계통명 입력" : "새 계통 명칭 입력"}
+                                                />
+
+                                                {/* 🌟 기존 계통 수정 모드일 때만 [변경] 버튼 표시 */}
+                                                {originalSystemName && (
                                                     <button
-                                                        onClick={() => { setIsDirectSystem(false); setEquipSystem(''); }}
-                                                        className="px-3 bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors whitespace-nowrap"
+                                                        onClick={handleRenameSystem}
+                                                        className="px-3 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 shadow-lg transition-colors whitespace-nowrap"
                                                     >
-                                                        취소
+                                                        변경
                                                     </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                        {/* ▲ 소속 계통 입력 부분 끝 ▲ */}
+                                                )}
+
+                                                <button
+                                                    onClick={handleCancelSystemInput}
+                                                    className="px-3 bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl text-xs font-bold hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors whitespace-nowrap"
+                                                >
+                                                    취소
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div><label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설명</label><input value={equipDesc} onChange={e => setEquipDesc(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="간략한 설명" /></div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block mb-1.5 ml-1">설명</label>
+                                        <input value={equipDesc} onChange={e => setEquipDesc(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="간략한 설명" />
+                                    </div>
                                 </>
                             )}
                             {/* 문서 등록 */}
@@ -1098,10 +1356,26 @@ const renderEquipDetail = () => {
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-zinc-500 block mb-1.5 ml-1">라벨 색상</label>
-                                        <div className="flex gap-2 overflow-x-auto py-1 scrollbar-hide">
-                                            {['zinc', 'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'].map(color => (
-                                                <button key={color} onClick={() => setNewCatColor(color)} className={`w-6 h-6 rounded-full flex-shrink-0 border-2 ${newCatColor === color ? 'border-zinc-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: `var(--color-${color}-500)` }}>
-                                                    <div className={`w-full h-full rounded-full bg-${color}-500`}></div>
+                                        {/* 🌟 [수정] Tailwind가 인식할 수 있도록 전체 클래스명을 명시한 배열 사용 */}
+                                        <div className="grid grid-cols-9 gap-2 py-1">
+                                            {[
+                                                { val: 'zinc', cls: 'bg-zinc-500' }, { val: 'red', cls: 'bg-red-500' },
+                                                { val: 'orange', cls: 'bg-orange-500' }, { val: 'amber', cls: 'bg-amber-500' },
+                                                { val: 'yellow', cls: 'bg-yellow-500' }, { val: 'lime', cls: 'bg-lime-500' },
+                                                { val: 'green', cls: 'bg-green-500' }, { val: 'emerald', cls: 'bg-emerald-500' },
+                                                { val: 'teal', cls: 'bg-teal-500' }, { val: 'cyan', cls: 'bg-cyan-500' },
+                                                { val: 'sky', cls: 'bg-sky-500' }, { val: 'blue', cls: 'bg-blue-500' },
+                                                { val: 'indigo', cls: 'bg-indigo-500' }, { val: 'violet', cls: 'bg-violet-500' },
+                                                { val: 'purple', cls: 'bg-purple-500' }, { val: 'fuchsia', cls: 'bg-fuchsia-500' },
+                                                { val: 'pink', cls: 'bg-pink-500' }, { val: 'rose', cls: 'bg-rose-500' }
+                                            ].map(({ val, cls }) => (
+                                                <button
+                                                    key={val}
+                                                    onClick={() => setNewCatColor(val)}
+                                                    className={`w-6 h-6 rounded-full flex-shrink-0 border-2 transition-transform ${newCatColor === val ? 'border-zinc-800 dark:border-white scale-125' : 'border-transparent hover:scale-110'}`}
+                                                >
+                                                    {/* 🌟 명시적 클래스(cls) 사용으로 색상 100% 표시 보장 */}
+                                                    <div className={`w-full h-full rounded-full ${cls} shadow-sm`}></div>
                                                 </button>
                                             ))}
                                         </div>
@@ -1206,7 +1480,8 @@ const renderEquipDetail = () => {
             {/* Confirm Dialog */}
             {dialogConfig.isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-zinc-900 w-80 p-6 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 text-center">
+                    {/* 너비를 내용에 맞게 자동(w-auto)으로 하되, 최소 320px ~ 최대 500px 사이에서 조절되도록 설정 */}
+                    <div className="bg-white dark:bg-zinc-900 w-auto min-w-[320px] max-w-[500px] p-6 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 text-center">
                         <h3 className="font-bold text-lg mb-2 text-zinc-800 dark:text-zinc-100">{dialogConfig.type === 'alert' ? '알림' : '확인'}</h3>
                         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6 whitespace-pre-wrap">{dialogConfig.message}</p>
                         <div className="flex gap-2">

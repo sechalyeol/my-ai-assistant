@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-18 17:50:21
+﻿// Last Updated: 2025-12-21 10:13:28
 import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, X, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import TodoModal from '../components/modals/TodoModal'; // 1단계에서 만든 모달 import
@@ -98,6 +98,7 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
     };
 
     // 🟢 [수정] 삭제 확인 다이얼로그 띄우기
+    // 🟢 [수정] 삭제 확인 다이얼로그 띄우기
     const handleDeleteTodo = (id) => {
         if (typeof id === 'string' && id.startsWith('auto-shift')) {
             alert("자동 생성된 근무 일정은 삭제할 수 없습니다.");
@@ -108,7 +109,8 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
             message: "정말 이 일정을 삭제하시겠습니까?",
             onConfirm: () => {
                 setTodos(prev => {
-                    const newTodos = prev.filter(t => t.id !== id);
+                    // 🌟 ID를 문자열로 변환해서 비교하도록 수정
+                    const newTodos = prev.filter(t => String(t.id) !== String(id));
                     ipcRenderer.send('save-schedules', newTodos);
                     return newTodos;
                 });
@@ -473,6 +475,33 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
                 <div className="flex-1 min-h-0">{calendarMode === 'week' ? renderWeekView() : renderMonthView()}</div>
             </div>
             {selectedTodo && <TodoModal todo={selectedTodo} onClose={() => setSelectedTodo(null)} onSave={handleSaveTodo} onDelete={handleDeleteTodo} />}
+
+            {/* 🌟 [추가] 삭제 확인 다이얼로그 UI */}
+            {dialogConfig.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-zinc-900 w-80 p-6 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 text-center">
+                        <h3 className="font-bold text-lg mb-2 text-zinc-800 dark:text-zinc-100">확인</h3>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6 whitespace-pre-wrap">{dialogConfig.message}</p>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })} 
+                                className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                            >
+                                취소
+                            </button>
+                            <button 
+                                onClick={() => { 
+                                    if (dialogConfig.onConfirm) dialogConfig.onConfirm(); 
+                                    setDialogConfig({ ...dialogConfig, isOpen: false }); 
+                                }} 
+                                className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg"
+                            >
+                                네, 삭제할게요
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
