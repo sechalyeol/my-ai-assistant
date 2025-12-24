@@ -70,16 +70,5 @@
     "targetTime": null,
     "color": "indigo",
     "data": null
-  },
-  {
-    "id": 1766191214896,
-    "type": "card",
-    "title": "메모",
-    "content": "4분기 PMS 교육 사진, 비상조치훈련 사진 찍기",
-    "url": null,
-    "targetTime": "09:30",
-    "color": "amber",
-    "data": null,
-    "finalIcon": null
   }
 ]

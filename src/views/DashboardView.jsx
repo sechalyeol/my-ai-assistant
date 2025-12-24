@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-21 10:13:28
+﻿// Last Updated: 2025-12-25 05:03:57
 // DashboardView.jsx
 
 import React, { useState, useRef, useEffect } from 'react'; // 🌟 useRef, useEffect 추가

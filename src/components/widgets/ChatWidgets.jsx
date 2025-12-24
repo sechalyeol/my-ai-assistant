@@ -1,6 +1,26 @@
-﻿// Last Updated: 2025-12-21 10:13:28
+﻿// Last Updated: 2025-12-25 05:03:57
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Wallet, Heart, BookOpen, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { 
+    Calendar as CalendarIcon, 
+    Wallet, 
+    Heart, 
+    BookOpen, 
+    ChevronLeft, 
+    ChevronRight, 
+    Menu, 
+    Link as LinkIcon, 
+    ExternalLink 
+} from 'lucide-react';
+
+// 🌟 [추가됨] 파비콘 가져오는 함수 (이게 없어서 에러가 났었습니다)
+const getFavicon = (url) => {
+    try {
+        const domain = new URL(url).hostname;
+        return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+    } catch (e) {
+        return null;
+    }
+};
 
 // 1. 일정 위젯
 export const ScheduleChatWidget = ({ data }) => {
@@ -161,7 +181,7 @@ export const StudyChatWidget = ({ data }) => {
     );
 };
 
-// 5. 3D 책 커버 플로우 위젯 (완전 복구)
+// 5. 3D 책 커버 플로우 위젯
 export const BookCoverFlowWidget = ({ tasks, onBookClick }) => {
     const books = tasks || [];
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -274,23 +294,19 @@ export const BookCoverFlowWidget = ({ tasks, onBookClick }) => {
     );
 };
 
-// src/components/widgets/ChatWidgets.jsx
-
-// src/components/widgets/ChatWidgets.jsx
-
+// 6. 커스텀 대시보드 위젯 (메모 & 링크)
 export const CustomDashboardChatWidget = ({ data }) => {
     const memos = data.filter(w => w.type === 'card');
     const links = data.filter(w => w.type === 'link');
 
     return (
         <div className="w-80 flex flex-col gap-4">
+            
             {/* 1. 메모/알람 섹션 */}
             {memos.length > 0 && (
                 <div className="space-y-2.5">
                     {memos.map(memo => {
-                        // 시간 정보가 있으면 알람으로 간주
                         const isAlarm = !!memo.targetTime;
-                        
                         return (
                             <div key={memo.id} className={`p-3.5 rounded-2xl border shadow-sm transition-all ${
                                 isAlarm 
@@ -325,8 +341,42 @@ export const CustomDashboardChatWidget = ({ data }) => {
                 </div>
             )}
 
-            {/* 2. 링크 섹션 (기존 코드 유지) */}
-            {/* ... */}
+            {/* 🌟 2. 링크 섹션 (finalIcon 대응 업데이트) */}
+            {links.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                    {links.map(link => {
+                        // 🌟 여기서 getFavicon을 사용합니다! (이제 정의되어 있으므로 에러 안 남)
+                        const iconSrc = link.finalIcon || getFavicon(link.url);
+
+                        return (
+                            <a 
+                                key={link.id} 
+                                href={link.url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="flex items-center gap-2 p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-400 transition-all group shadow-sm"
+                            >
+                                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-110 transition-transform text-xs">
+                                    {iconSrc ? (
+                                        <img 
+                                            src={iconSrc} 
+                                            alt={link.title} 
+                                            className="w-5 h-5 object-contain"
+                                            onError={(e) => { e.target.parentElement.innerHTML = '🔗'; }} 
+                                        />
+                                    ) : (
+                                        '🔗'
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] font-bold text-zinc-700 dark:text-zinc-200 truncate">{link.title}</p>
+                                    <p className="text-[8px] text-indigo-500 dark:text-indigo-400 font-medium">바로가기 →</p>
+                                </div>
+                            </a>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };
