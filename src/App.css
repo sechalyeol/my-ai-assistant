@@ -1,49 +1,10 @@
-﻿/* Last Updated: 2025-12-25 05:03:57 */
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+﻿/* Last Updated: 2025-12-25 06:56:43 */
+/* src/App.css */
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
+/* 🚨 기존에 있던 #root, .logo, .card 관련 코드는 모두 삭제해야 합니다! */
+/* 이 스타일들이 화면을 강제로 가운데 정렬시키고 여백을 주어 레이아웃을 깨뜨렸습니다. */
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
-/* src/index.css 맨 아래에 추가 */
-
+/* 애니메이션 유틸리티 클래스만 유지 */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -74,13 +35,4 @@
 }
 .animate-scale-up {
   animation: scaleUp 0.2s ease-out forwards;
-}
-
-/* 스크롤바 숨기기 유틸리티 */
-.scrollbar-hide::-webkit-scrollbar {
-    display: none;
-}
-.scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
 }

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-25 05:03:57
+﻿// Last Updated: 2025-12-25 06:56:43
 // DashboardView.jsx
 
 import React, { useState, useRef, useEffect } from 'react'; // 🌟 useRef, useEffect 추가
@@ -493,7 +493,7 @@ const DashboardView = ({
                             return (
                                 <div
                                     key={widget.id} // 🌟 key는 widget.id로 유지되어야 합니다.
-                                    className={`group relative flex flex-col items-center gap-2 transform transition-all duration-300 ${draggableProps.className} ${isBeingDragged ? 'opacity-0' : ''}`}
+                                    className={`shortcut-grid-item group relative flex flex-col items-center gap-2 transform transition-all duration-300 ${draggableProps.className} ${isBeingDragged ? 'opacity-0' : ''}`}
                                     {...draggableProps} // 🌟 드래그 속성 적용
                                     onDoubleClick={handleDragModeExit} // 더블클릭으로 모드 해제
                                 >

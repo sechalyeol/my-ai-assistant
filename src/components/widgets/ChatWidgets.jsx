@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-25 05:03:57
+﻿// Last Updated: 2025-12-25 06:56:43
 import React, { useState } from 'react';
 import { 
     Calendar as CalendarIcon, 
@@ -101,7 +101,7 @@ export const MentalChatWidget = ({ data }) => {
     const status = getStatus(data?.score || 0);
 
     return (
-        <div className="w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-0 overflow-hidden shadow-sm">
+        <div className="font-sans text-base w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-0 overflow-hidden shadow-sm">
             <div className="p-4 bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-800/50 dark:to-zinc-900 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <Heart size={16} className="text-rose-500 fill-rose-500" />
