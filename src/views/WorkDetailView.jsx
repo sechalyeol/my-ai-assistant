@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-25 06:56:43
+﻿// Last Updated: 2025-12-25 20:05:28
 import React, { useState, useRef, useEffect } from 'react';
 import {
     Briefcase, BookOpen, Wrench, AlertTriangle, ChevronRight, Plus, Edit3, Trash2,
@@ -8,6 +8,7 @@ import {
     Bold
 } from 'lucide-react';
 import PanZoomViewer from '../components/ui/PanZoomViewer';
+
 
 const { ipcRenderer } = window.require('electron');
 

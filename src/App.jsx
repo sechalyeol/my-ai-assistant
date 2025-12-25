@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-25 06:56:43
+﻿// Last Updated: 2025-12-25 20:05:28
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -391,20 +391,20 @@ function App() {
             // 🟢 [핵심 3] 메모 vs 일정 구분 로직 추가
             systemInstruction += `
             
-            [명령어 구분 원칙 - 매우 중요]
+            [명령어 구분 원칙-매우 중요]
             1. **대시보드 메모 (create_dashboard_widget)**:
-               - 사용자가 "메모해줘", "적어줘", "기록해줘" 같은 표현을 사용하면 **반드시** 'create_dashboard_widget' (type: 'card') 명령을 사용하세요.
-               - 시간 정보가 포함되어 있어도 "메모"라고 명시했다면 일정이 아닌 위젯(Sticky Note)으로 만들어야 합니다.
-               - 🚨 **중요**: 메모 내용에 '시간'이 포함되어 있다면 targetTime 필드에 "HH:MM" (24시간제) 형식으로 추가해 주세요.
-               - 예: "이따 6시 미팅 메모해" -> create_dashboard_widget { title: "메모", content: "6시 미팅", color: "amber", targetTime: "18:00" }
-               - 예: "새벽 3시 59분 기동" -> create_dashboard_widget { title: "메모", content: "3시 59분 기동", color: "rose", targetTime: "03:59" }
+              -사용자가 "메모해줘", "적어줘", "기록해줘" 같은 표현을 사용하면 **반드시** 'create_dashboard_widget' (type: 'card') 명령을 사용하세요.
+              -시간 정보가 포함되어 있어도 "메모"라고 명시했다면 일정이 아닌 위젯(Sticky Note)으로 만들어야 합니다.
+              -🚨 **중요**: 메모 내용에 '시간'이 포함되어 있다면 targetTime 필드에 "HH:MM" (24시간제) 형식으로 추가해 주세요.
+              -예: "이따 6시 미팅 메모해" -> create_dashboard_widget { title: "메모", content: "6시 미팅", color: "amber", targetTime: "18:00" }
+              -예: "새벽 3시 59분 기동" -> create_dashboard_widget { title: "메모", content: "3시 59분 기동", color: "rose", targetTime: "03:59" }
 
             2. **일정 추가 (add_todo)**:
-               - 사용자가 "일정 잡아", "스케줄 추가해", "알려줘", "등록해"라고 말하거나, 명백히 할 일 관리를 원할 때 사용하세요.
-               - 예: "6시에 미팅 일정 추가해" -> add_todo { date: "...", startTime: "18:00", content: "미팅" }
+              -사용자가 "일정 잡아", "스케줄 추가해", "알려줘", "등록해"라고 말하거나, 명백히 할 일 관리를 원할 때 사용하세요.
+              -예: "6시에 미팅 일정 추가해" -> add_todo { date: "...", startTime: "18:00", content: "미팅" }
             
             3. **기본값**:
-               - 구분이 모호할 때는 'add_todo'(일정)를 우선하되, "메모"라는 단어가 들어가면 무조건 1번(위젯)을 따르세요.
+              -구분이 모호할 때는 'add_todo'(일정)를 우선하되, "메모"라는 단어가 들어가면 무조건 1번(위젯)을 따르세요.
             `;
 
             const model = genAI.getGenerativeModel({
@@ -435,24 +435,12 @@ function App() {
 
     // 🎲 랜덤 퀴즈 생성 및 챗봇 전송 함수
     const generateRandomQuiz = async () => {
-        // 🌟 [수정] ID 충돌 방지를 위해 랜덤 소수점 추가
         const loadingId = Date.now() + Math.random();
-
         setMessages(prev => [...prev, { id: loadingId, role: 'ai', type: 'text', content: '📚 설비 데이터를 분석하여 실무 문제를 출제하고 있습니다...', isLoading: true }]);
 
         try {
-            // 1. 전체 데이터 가져오기 (공통 교육 제외)
-            // const allManuals = work.manuals || []; // 👈 공통 기초 교육 (제외함)
-            const allGuides = equipment.fieldGuides || []; // 👈 현장/설비 가이드 (이것만 사용)
-
-            // 🌟 [수정됨] 공통 교육(allManuals)은 제외하고, 설비 가이드(allGuides) 중에서만 필터링
-            const validItems = [...allGuides].filter(item => {
-                // 현장 가이드인 경우: 스텝이 하나라도 있어야 함
-                if (item.steps && Array.isArray(item.steps)) {
-                    return item.steps.length > 0;
-                }
-                return false;
-            });
+            const allGuides = equipment.fieldGuides || [];
+            const validItems = [...allGuides].filter(item => item.steps && Array.isArray(item.steps) && item.steps.length > 0);
 
             if (validItems.length === 0) {
                 setMessages(prev => prev.map(msg => msg.id === loadingId ? {
@@ -464,99 +452,89 @@ function App() {
                 return;
             }
 
-            // 2. 랜덤 추첨 (이하 로직은 동일)
             const randomItem = validItems[Math.floor(Math.random() * validItems.length)];
-
-            // 3. 텍스트 및 이미지 추출
             let contextText = `제목: ${randomItem.title}\n설명: ${randomItem.desc}\n`;
             let availableImages = [];
 
-            // (매뉴얼 처리 로직은 이제 필요 없지만, 혹시 나중에 쓸 수 있으니 남겨두거나 지워도 됨)
-            // 현장 가이드 처리 로직만 실행됨
             (randomItem.steps || []).forEach(s => {
                 contextText += `${s.title}: ${s.content}\n`;
                 if (s.image) availableImages.push(s.image);
             });
 
-            // ... (이하 4번 이미지 결정 로직부터 끝까지 기존 코드와 동일) ...
-
-            // 4. 이미지 문제 여부 결정 (이미지 있으면 50% 확률)
             const selectedImage = availableImages.length > 0 && Math.random() > 0.5
                 ? availableImages[Math.floor(Math.random() * availableImages.length)]
                 : null;
 
-            // 5. 프롬프트 구성 (명확한 정오답 구분을 위한 '팩트 조작' 지시)
-            // 5. 프롬프트 구성 (오답 논란 원천 차단 및 팩트 조작 강화)
             const prompt = `
 당신은 산업 현장의 **정밀 직무 평가관**입니다.
 작업자가 아래 [직무 자료]를 정확히 이해했는지 검증하기 위해, **정답과 오답이 명확히 구분되는 4지선다형 문제**를 출제하십시오.
 
-**[출제 절대 원칙 - 위반 금지]**
-1. **오답(Distractor) 작성 규칙 (가장 중요)**:
-   - 🚫 **타 스텝 인용 금지**: 매뉴얼에 있는 **다른 올바른 스텝(Step)의 내용을 그대로 가져와서 오답 보기에 넣지 마십시오.** (예: '3단계'를 묻는 문제에 '1단계(전제조건)' 내용을 오답으로 넣으면, 작업자는 이를 정답으로 오해합니다.)
-   - ✅ **거짓 내용 생성**: 오답은 무조건 내용을 비틀어서 **사실이 아닌 내용(False)**으로 만드십시오.
-     - **방향 반전**: '시계방향' ↔ '반시계방향', 'Open' ↔ 'Close'
-     - **부품 변경**: '핸들' → '스위치', '밸브' → '펌프'
-     - **수치 조작**: '80도' → '100도', '5분' → '30분'
-     - **행동 반전**: '고정한다' → '분리한다', '투입한다' → '차단한다'
+**[출제 절대 원칙]**
+1. 오답 보기는 사실이 아닌 내용(False)으로 조작하십시오.
+2. 자료에 적힌 정확한 용어만 사용하십시오.
+3. 정답은 자료의 핵심 문장을 정확히 인용하십시오.
 
-2. **용어의 정확성**:
-   - '좌회전/우회전', '정방향/역방향' 등 매뉴얼에 없는 애매한 유의어를 쓰지 말고, **자료에 적힌 정확한 용어(예: 시계방향)**만 사용하십시오.
+**[출력 절대 원칙 - 반드시 준수]**
+1. 마크다운 코드 블록(json 기호)을 절대 사용하지 마십시오.
+2. JSON 문법을 엄격히 준수하십시오. (배열 끝 쉼표 금지)
+3. 오직 순수한 JSON 객체 하나만 출력하십시오.
 
-3. **정답 작성**:
-   - 자료의 핵심 문장을 정확히 인용하여 정답으로 구성하십시오.
-
-**[출력 형식]**
-반드시 아래 **순수 JSON 포맷**으로만 응답하십시오.
-
+**[JSON 구조 예시]**
 {
   "question": "문제 지문",
-  "options": ["보기1 (조작된 거짓 내용)", "보기2 (조작된 거짓 내용)", "보기3 (정답)", "보기4 (조작된 거짓 내용)"],
-  "answer": 2, 
-  "explanation": "해설 (정답의 근거가 되는 스텝을 인용하고, 오답들이 왜 '사실과 다른지' 구체적으로 설명)"
+  "options": ["보기1", "보기2", "보기3", "보기4"],
+  "answer": 2,
+  "explanation": "해설"
 }
 
 **[참고 직무 자료: ${randomItem.title}]**
 ${contextText.substring(0, 6000)}
             `;
 
-            // 6. Gemini 호출
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
             let result;
             if (selectedImage) {
                 const base64Data = selectedImage.split(',')[1];
                 const mimeType = selectedImage.split(';')[0].split(':')[1];
-
-                result = await model.generateContent([
-                    prompt,
-                    { inlineData: { data: base64Data, mimeType: mimeType } }
-                ]);
+                result = await model.generateContent([prompt, { inlineData: { data: base64Data, mimeType: mimeType } }]);
             } else {
                 result = await model.generateContent(prompt);
             }
 
             const responseText = result.response.text();
-            const cleanedText = responseText.replace(/```json | ```/g, '').trim();
-            const quizJson = JSON.parse(cleanedText);
+            let cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-            // 7. 메시지 업데이트
-            setMessages(prev => prev.map(msg =>
-                msg.id === loadingId ? {
+            const startIdx = cleanedText.indexOf('{');
+            const endIdx = cleanedText.lastIndexOf('}');
+            if (startIdx !== -1 && endIdx !== -1) {
+                cleanedText = cleanedText.substring(startIdx, endIdx + 1);
+            }
+
+            try {
+                const quizJson = JSON.parse(cleanedText);
+                setMessages(prev => prev.map(msg =>
+                    msg.id === loadingId ? {
+                        ...msg,
+                        type: 'quiz',
+                        content: '직무 퀴즈가 생성되었습니다.',
+                        isLoading: false,
+                        quizData: { ...quizJson, image: selectedImage, title: randomItem.title }
+                    } : msg
+                ));
+            } catch (parseError) {
+                console.error("JSON Parsing Error:", parseError);
+                setMessages(prev => prev.map(msg => msg.id === loadingId ? {
                     ...msg,
-                    type: 'quiz',
-                    content: '직무 퀴즈가 생성되었습니다.',
-                    isLoading: false,
-                    quizData: { ...quizJson, image: selectedImage, title: randomItem.title }
-                } : msg
-            ));
-
+                    content: "AI가 데이터를 생성하는 중 문법 오류가 발생했습니다. 다시 시도해 주세요.",
+                    isLoading: false
+                } : msg));
+            }
         } catch (error) {
             console.error("Quiz Gen Error:", error);
-            setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, content: "문제 생성 중 오류가 발생했습니다. 다시 시도해 주세요.", isLoading: false } : msg));
+            setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, content: "문제 생성 중 오류가 발생했습니다.", isLoading: false } : msg));
         }
     };
-
+    
     const handleSendMessage = async (e, manualText = null) => {
         if (e) e.preventDefault();
         const text = manualText || inputValue;
@@ -625,11 +603,11 @@ ${contextText.substring(0, 6000)}
                         else finalCategory = 'default';
                     }
                     const isDuplicate = currentRealData.some(t => t.date === newDate && (t.startTime || '') === newTime && t.text === newContent);
-                    if (isDuplicate) { replyText = `✋ 이미 저장된 일정입니다: ${ newContent } `; } else {
+                    if (isDuplicate) { replyText = `✋ 이미 저장된 일정입니다: ${newContent} `; } else {
                         const newTodo = { id: Date.now() + Math.random(), text: newContent, date: newDate, startTime: newTime, endTime: command.endTime || '', done: false, memo: '', category: finalCategory };
                         const nextTodos = [...currentRealData, newTodo];
                         ipcRenderer.send('save-schedules', nextTodos); setTodos(nextTodos);
-                        replyText = `✅ 일정 추가: ${ newDate } ${ newContent } `;
+                        replyText = `✅ 일정 추가: ${newDate} ${newContent} `;
                     }
                 }
                 else if (action === 'modify_todo') {
@@ -657,12 +635,12 @@ ${contextText.substring(0, 6000)}
                     } else {
                         // 3. 대상을 못 찾았을 경우 에러 메시지 출력
                         replyText = `⚠️ 삭제할 일정을 찾을 수 없습니다. (ID 불일치)`;
-                        console.warn(`[Delete Failed] Requested ID: ${ command.id }, Available IDs: `, todos.map(t => t.id));
+                        console.warn(`[Delete Failed] Requested ID: ${command.id}, Available IDs: `, todos.map(t => t.id));
                     }
                 }
                 else if (action === 'search_books' && command.results) {
                     setDev(prev => ({ ...prev, searchResults: command.results }));
-                    replyText = `🔍 총 ${ command.results.length }권의 교재가 검색되었습니다.`;
+                    replyText = `🔍 총 ${command.results.length}권의 교재가 검색되었습니다.`;
                 }
                 else if (action === 'generate_curriculum') {
                     const regenerateIds = (item) => ({ ...item, id: Date.now() + Math.random().toString(36).substr(2, 9), children: item.children ? item.children.map(regenerateIds) : [] });
@@ -690,7 +668,7 @@ ${contextText.substring(0, 6000)}
                         const avgScore = Math.round(totalScore / (todayLogs.length + 1));
                         return { ...prev, currentMood: newLog.mood, score: avgScore, todayAdvice: command.daily_advice, logs: [newLog, ...prev.logs] };
                     });
-                    replyText = `📝 멘탈 기록 완료: ${ command.mood } (${ command.score }점)`;
+                    replyText = `📝 멘탈 기록 완료: ${command.mood} (${command.score}점)`;
                 }
                 else if (action === 'add_equipment_log') {
                     const { equipId, content, date } = command;
@@ -700,7 +678,7 @@ ${contextText.substring(0, 6000)}
                         const newLog = { id: Date.now(), date: date || new Date().toISOString().split('T')[0], content: content, type: 'AI' };
                         const newList = prev.list.map(e => e.id === targetId ? { ...e, logs: [newLog, ...(e.logs || [])] } : e);
                         ipcRenderer.send('save-equipment', { ...prev, list: newList });
-                        replyText = `🔧 정비 이력을 기록했습니다: ${ content } `;
+                        replyText = `🔧 정비 이력을 기록했습니다: ${content} `;
                         return { ...prev, list: newList };
                     });
                 }
@@ -757,7 +735,7 @@ ${contextText.substring(0, 6000)}
                         replyText = `🗑️ '${target.title}' 위젯을 삭제했습니다.`;
                     } else {
                         // 4. 대상을 찾지 못한 경우 메시지 명확화
-                        replyText = `⚠️ '${command.title}' 위젯을 찾을 수 없습니다. (현재 목록: ${ customWidgets.map(w => w.title).join(', ') })`;
+                        replyText = `⚠️ '${command.title}' 위젯을 찾을 수 없습니다. (현재 목록: ${customWidgets.map(w => w.title).join(', ')})`;
                     }
                 }
 
@@ -786,11 +764,11 @@ ${contextText.substring(0, 6000)}
                             type: 'widget',
                             widgetType: 'custom_dashboard', // ChatWidgets에서 처리할 새로운 타입
                             data: filteredData,
-                            content: `등록하신 ${ widgetLabel } 위젯 목록입니다.`
+                            content: `등록하신 ${widgetLabel} 위젯 목록입니다.`
                         }]);
                         replyText = null; // 별도의 텍스트 응답을 방지하기 위해 null 설정
                     } else {
-                        replyText = `등록된 ${ widgetLabel } 위젯이 없습니다.`;
+                        replyText = `등록된 ${widgetLabel} 위젯이 없습니다.`;
                     }
                 }
 
@@ -854,7 +832,7 @@ ${contextText.substring(0, 6000)}
             <div className="h-screen w-full bg-transparent flex items-center justify-center p-[1px]">
                 <div className="flex flex-col w-full h-full font-sans overflow-hidden relative transition-colors duration-500 bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 border dark:border-zinc-800 rounded-2xl">
                     <header className="drag-region h-14 flex items-center justify-between px-4 border-b bg-white/80 border-zinc-200/50 dark:bg-zinc-900/80 dark:border-white/5 backdrop-blur-md sticky top-0 z-20">
-                        <div className="flex items-center gap-2.5"><div className={`w - 7 h - 7 rounded - lg flex items - center justify - center shadow - md transition - colors ${ viewMode === 'chat' ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-emerald-600 shadow-emerald-500/20' } `}><Bot size={16} className="text-white" /></div><h1 className="font-bold text-xs tracking-tight">AI Partner Pro</h1></div>
+                        <div className="flex items-center gap-2.5"><div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-md transition-colors ${viewMode === 'chat' ? 'bg-indigo-600 shadow-indigo-500/20' : 'bg-emerald-600 shadow-emerald-500/20'} `}><Bot size={16} className="text-white" /></div><h1 className="font-bold text-xs tracking-tight">AI Partner Pro</h1></div>
                         <div className="flex items-center gap-1 no-drag">
                             {viewMode === 'chat' ? (<button onClick={() => ipcRenderer.send('toggle-dashboard')} className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-500 transition-colors mr-2"><LayoutDashboard size={18} /></button>) : (<div className="mr-2"></div>)}
                             <button onClick={() => setThemeMode(p => p === 'auto' ? 'light' : p === 'light' ? 'dark' : 'auto')} className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-500 relative">{themeMode === 'auto' ? (<>{isDarkMode ? <Moon size={18} /> : <Sun size={18} />}<span className="absolute bottom-0 right-0 h-[10px] w-auto px-1 bg-indigo-600 text-white text-[6px] font-bold rounded-full flex items-center justify-center -mb-0.5 -mr-0.5 leading-none">AUTO</span></>) : (isDarkMode ? <Moon size={18} /> : <Sun size={18} />)}</button>
@@ -866,8 +844,8 @@ ${contextText.substring(0, 6000)}
                         {viewMode === 'dashboard' ? (
                             <div className="flex h-full overflow-hidden">
                                 <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} settings={settings} onUpdateSettings={handleGroupChange} />
-                                <div className={`flex flex - col flex - shrink - 0 border - r border - zinc - 200 dark: border - zinc - 800 bg - white dark: bg - zinc - 900 / 50 transition - all duration - 300 ${ isSidebarExpanded ? 'w-[280px] p-4' : 'w-[64px] py-4 px-2 items-center' } `}>
-                                    <button onClick={() => setIsSidebarExpanded(p => !p)} className={`p - 2 rounded - lg hover: bg - zinc - 200 dark: hover: bg - zinc - 800 transition - colors mb - 6 ${ isSidebarExpanded ? 'self-start' : 'self-center' } `}><Menu size={20} className="text-zinc-500" /></button>
+                                <div className={`flex flex-col flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 transition-all duration-300 ${isSidebarExpanded ? 'w-[280px] p-4' : 'w-[64px] py-4 px-2 items-center'}`}>
+                                    <button onClick={() => setIsSidebarExpanded(p => !p)} className={`p-2 rounded-lg hover: bg-zinc-200 dark: hover: bg-zinc-800 transition-colors mb-6 ${isSidebarExpanded ? 'self-start' : 'self-center'} `}><Menu size={20} className="text-zinc-500" /></button>
                                     {isSidebarExpanded ? (
                                         <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-6 w-full border border-zinc-200 dark:border-zinc-700/50 p-3 flex items-center justify-between animate-fade-in shadow-sm gap-2">
                                             <div className="flex items-center gap-3 min-w-0 overflow-hidden">
@@ -923,18 +901,17 @@ ${contextText.substring(0, 6000)}
                             <div className="h-full flex flex-col">
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
                                     {messages.map((msg) => (
-                                        <div key={msg.id} className={`flex gap - 3 ${ msg.role === 'user' ? 'flex-row-reverse' : '' } `}>
-                                            <div className={`w - 8 h - 8 rounded - full flex - shrink - 0 flex items - center justify - center border shadow - sm ${ msg.role === 'ai' ? 'bg-white border-zinc-200 text-indigo-600 dark:bg-zinc-800 dark:border-zinc-700' : 'bg-zinc-200 dark:bg-zinc-700' } `}>
+                                        <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                            <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center border shadow-sm ${msg.role === 'ai' ? 'bg-white border-zinc-200 text-indigo-600 dark:bg-zinc-800 dark:border-zinc-700' : 'bg-zinc-200 dark:bg-zinc-700'} `}>
                                                 {msg.role === 'ai' ? <Sparkles size={14} /> : <User size={14} className="opacity-70" />}
                                             </div>
 
-                                            <div className={`px - 3.5 py - 2.5 rounded - 2xl text - sm shadow - sm border max - w - [85 %] ${
-                msg.role === 'user'
-                ? 'bg-indigo-600 text-white border-indigo-500'
-                : msg.type === 'widget' || msg.type === 'quiz' // 🌟 quiz 타입도 배경 투명하게
-                    ? 'bg-transparent border-none shadow-none p-0'
-                    : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200'
-            } `}>
+                                            <div className={`px-3.5 py-2.5 rounded-2xl text-sm shadow-sm border max-w-[85%] ${msg.role === 'user'
+                                                ? 'bg-indigo-600 text-white border-indigo-500'
+                                                : msg.type === 'widget' || msg.type === 'quiz'
+                                                    ? 'bg-transparent border-none shadow-none p-0'
+                                                    : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200'
+                                                }`}>
                                                 {msg.type === 'widget' ? (<>{msg.widgetType === 'schedule' && <ScheduleChatWidget data={msg.data} />}{msg.widgetType === 'finance' && <FinanceChatWidget data={msg.data} />}{msg.widgetType === 'mental' && <MentalChatWidget data={msg.data} />}{msg.widgetType === 'development' && <StudyChatWidget data={msg.data} />}{msg.widgetType === 'custom_dashboard' && <CustomDashboardChatWidget data={msg.data} />}</>) : msg.type === 'quiz' ? (
                                                     /* 🌟 [추가됨] 퀴즈 카드 렌더링 */
                                                     <QuizChatCard data={msg.quizData} />
