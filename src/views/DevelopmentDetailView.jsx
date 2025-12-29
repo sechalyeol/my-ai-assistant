@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 11:51:53
+﻿// Last Updated: 2025-12-29 14:52:23
 // [Part 1] 파일 상단: 임포트 및 InputModal
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -48,7 +48,7 @@ const InputModal = ({ isOpen, type, title, value, onClose, onConfirm }) => {
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') onConfirm(inputValue); }}
-                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none mb-6"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none mb-6"
                     placeholder="내용을 입력하세요..."
                 />
                 <div className="flex gap-3">
@@ -280,7 +280,7 @@ const EngineeringMathPad = ({ onDirectInsert }) => {
 
     return (
         <div className="w-[340px] bg-white dark:bg-zinc-900 flex flex-col h-full border-l border-zinc-200 dark:border-zinc-800 select-none">
-            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50">
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900">
                 <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Math Tools</h4>
                 <div className="flex bg-white dark:bg-zinc-800 rounded-lg p-1 border border-zinc-200 dark:border-zinc-700"><TabButton id="calc" label="Calculus" /><TabButton id="symbol" label="Symbols" /><TabButton id="num" label="Number" /></div>
             </div>
@@ -604,7 +604,7 @@ return (
             {!activeBookId && (
                 <>
                     <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold flex items-center gap-2 text-zinc-800 dark:text-white"><BookOpen className="text-emerald-500" /> 내 서재</h2></div>
-                    <div className="flex gap-2 mb-6"><input id="book-search-input" value={inputTopic} onChange={(e) => setInputTopic(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearchBooks()} placeholder="새로 학습할 교재 검색" className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm outline-none shadow-sm focus:ring-2 focus:ring-emerald-500/50" /><button onClick={handleSearchBooks} disabled={isSearching} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 rounded-xl font-bold text-sm shadow-md transition-colors disabled:opacity-70 flex items-center gap-2">{isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search size={16} />} 검색</button></div>
+                    <div className="flex gap-2 mb-6"><input id="book-search-input" value={inputTopic} onChange={(e) => setInputTopic(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearchBooks()} placeholder="새로 학습할 교재 검색" className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none shadow-sm focus:ring-2 focus:ring-emerald-500/50" /><button onClick={handleSearchBooks} disabled={isSearching} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 rounded-xl font-bold text-sm shadow-md transition-colors disabled:opacity-70 flex items-center gap-2">{isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search size={16} />} 검색</button></div>
                     {searchResults.length > 0 && (
                         <div className="mb-6 p-3 bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm animate-fade-in">
                             <div className="flex justify-between items-center mb-2"><h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 px-1">검색 결과 ({searchResults.length})</h3><button onClick={() => setDev(prev => ({ ...prev, searchResults: [] }))} className="p-1 text-zinc-400 hover:text-zinc-600 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"><X size={14} /></button></div>

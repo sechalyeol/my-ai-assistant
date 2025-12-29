@@ -247,5 +247,35 @@
     "done": false,
     "memo": "",
     "category": "health"
+  },
+  {
+    "id": 1766976804118.9282,
+    "text": "안양",
+    "date": "2025-12-31",
+    "startTime": "",
+    "endTime": "",
+    "done": false,
+    "memo": "",
+    "category": "personal"
+  },
+  {
+    "id": 1766976816541.0095,
+    "text": "영종도",
+    "date": "2026-01-05",
+    "startTime": "",
+    "endTime": "",
+    "done": false,
+    "memo": "",
+    "category": "personal"
+  },
+  {
+    "id": 1766976830712.3655,
+    "text": "고재준 방어",
+    "date": "2026-01-08",
+    "startTime": "",
+    "endTime": "",
+    "done": false,
+    "memo": "",
+    "category": "personal"
   }
 ]

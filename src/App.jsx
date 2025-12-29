@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 11:51:53
+﻿// Last Updated: 2025-12-29 14:52:23
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -534,7 +534,7 @@ ${contextText.substring(0, 6000)}
             setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, content: "문제 생성 중 오류가 발생했습니다.", isLoading: false } : msg));
         }
     };
-    
+
     const handleSendMessage = async (e, manualText = null) => {
         if (e) e.preventDefault();
         const text = manualText || inputValue;
@@ -845,7 +845,12 @@ ${contextText.substring(0, 6000)}
                             <div className="flex h-full overflow-hidden">
                                 <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} settings={settings} onUpdateSettings={handleGroupChange} />
                                 <div className={`flex flex-col flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 transition-all duration-300 ${isSidebarExpanded ? 'w-[280px] p-4' : 'w-[64px] py-4 px-2 items-center'}`}>
-                                    <button onClick={() => setIsSidebarExpanded(p => !p)} className={`p-2 rounded-lg hover: bg-zinc-200 dark: hover: bg-zinc-800 transition-colors mb-6 ${isSidebarExpanded ? 'self-start' : 'self-center'} `}><Menu size={20} className="text-zinc-500" /></button>
+                                    <button
+                                        onClick={() => setIsSidebarExpanded(p => !p)}
+                                        className={`p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors mb-6 ${isSidebarExpanded ? 'self-start' : 'self-center'}`}
+                                    >
+                                        <Menu size={20} className="text-zinc-500 dark:text-zinc-400" />
+                                    </button>
                                     {isSidebarExpanded ? (
                                         <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-6 w-full border border-zinc-200 dark:border-zinc-700/50 p-3 flex items-center justify-between animate-fade-in shadow-sm gap-2">
                                             <div className="flex items-center gap-3 min-w-0 overflow-hidden">

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 11:51:53
+﻿// Last Updated: 2025-12-29 14:52:23
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Sparkles, Send, Trash2, BookOpen, Heart, Bot, AlertTriangle } from 'lucide-react';
@@ -93,7 +93,7 @@ const MentalDetailView = ({ mental, setMental, handleSendMessage }) => {
                 </div>
                 <div className="col-span-1 bg-white dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm flex flex-col">
                     <h3 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mb-2 flex items-center gap-2"><Sparkles size={14} className="text-amber-500" /> 마음 기록</h3>
-                    <textarea value={diaryInput} onChange={(e) => setDiaryInput(e.target.value)} placeholder="오늘 하루는 어땠나요?" className="flex-1 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-indigo-500/50 outline-none mb-3" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleDiarySubmit(); } }} />
+                    <textarea value={diaryInput} onChange={(e) => setDiaryInput(e.target.value)} placeholder="오늘 하루는 어땠나요?" className="flex-1 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm text-zinc-900 dark:text-zinc-100 resize-none focus:ring-2 focus:ring-indigo-500/50 outline-none mb-3" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleDiarySubmit(); } }} />
                     <div className="flex justify-end"><button onClick={handleDiarySubmit} disabled={isAnalyzing || !diaryInput.trim()} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-500/20">{isAnalyzing ? '분석 중...' : '기록하기'} <Send size={12} /></button></div>
                 </div>
             </div>

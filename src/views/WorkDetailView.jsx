@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 11:51:53
+﻿// Last Updated: 2025-12-29 14:52:23
 import React, { useState, useRef, useEffect } from 'react';
 import {
     Briefcase, BookOpen, Wrench, AlertTriangle, ChevronRight, Plus, Edit3, Trash2,
@@ -379,8 +379,13 @@ const WorkDetailView = ({
         const [isOpen, setIsOpen] = useState(false);
 
         // 테마별 색상 설정
-        const activeColor = theme === 'emerald' ? 'text-emerald-600 bg-emerald-50' : 'text-indigo-600 bg-indigo-50';
-        const hoverColor = theme === 'emerald' ? 'hover:bg-emerald-50' : 'hover:bg-indigo-50';
+        const activeColor = theme === 'emerald'
+            ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400'
+            : 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400';
+
+        const hoverColor = theme === 'emerald'
+            ? 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+            : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/20';
         const ringColor = theme === 'emerald' ? 'focus:ring-emerald-500' : 'focus:ring-indigo-500';
 
         return (
@@ -1247,7 +1252,7 @@ ${contextText.substring(0, 6000)}
                                 </div>
                             );
                         })()}
-                        
+
                         {/* 🌟 [추가됨] 3. VALVE MAP 탭 내용 */}
                         {activeTab === 'MAP' && (
                             <div className="h-full w-full bg-zinc-50 dark:bg-zinc-900 p-4">
@@ -1807,7 +1812,8 @@ ${contextText.substring(0, 6000)}
                         </div>
 
                         {/* 하단 버튼 (스텝 이동 / 개요 확인) */}
-                        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50">
+                        {/* 🌟 [수정됨] 다크 모드 배경색(dark:bg-zinc-900) 추가 */}
+                        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900">
                             {isOverview ? (
                                 <button
                                     onClick={() => {

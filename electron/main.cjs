@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 11:51:53
+﻿// Last Updated: 2025-12-29 14:52:23
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
@@ -14,6 +14,7 @@ require('dotenv').config();
 
 const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron');
 
+
 console.log("네이버 키 확인:", process.env.NAVER_CLIENT_ID);
 
 // 🟢 [추가] 캐시 에러 방지를 위한 하드웨어 가속 비활성화 (선택 사항)
@@ -28,15 +29,16 @@ let currentThemeMode = 'auto';
 // 프로젝트 루트 경로 설정
 const PROJECT_ROOT = process.cwd();
 const DATA_PATHS = {
-  schedules: path.join(PROJECT_ROOT, 'schedules.json'), 
-  finance: path.join(PROJECT_ROOT, 'finance.json'),
-  mental: path.join(PROJECT_ROOT, 'mental.json'),
-  development: path.join(PROJECT_ROOT, 'development.json'),
-  work: path.join(PROJECT_ROOT, 'work.json'),
-  settings: path.join(PROJECT_ROOT, 'settings.json'),
-  equipment: path.join(PROJECT_ROOT, 'equipment.json'),
-  user: path.join(PROJECT_ROOT, 'user-profile.json'),
-  widgets: path.join(PROJECT_ROOT, 'widgets.json')
+    schedules: path.join(PROJECT_ROOT, 'schedules.json'),
+    finance: path.join(PROJECT_ROOT, 'finance.json'),
+    mental: path.join(PROJECT_ROOT, 'mental.json'),
+    development: path.join(PROJECT_ROOT, 'development.json'),
+    work: path.join(PROJECT_ROOT, 'work.json'),
+    settings: path.join(PROJECT_ROOT, 'settings.json'),
+    equipment: path.join(PROJECT_ROOT, 'equipment.json'),
+    user: path.join(PROJECT_ROOT, 'user-profile.json'),
+    widgets: path.join(PROJECT_ROOT, 'widgets.json'),
+    mapData: path.join(PROJECT_ROOT, 'src/data/mapData.json')
 };
 
 // 통합된 데이터 업데이트 알림 함수
@@ -52,83 +54,84 @@ function broadcastUpdate(dataType) {
 
 // 🟢 [수정됨] 통합된 saveData 함수 (안전장치 추가)
 function saveData(filePath, data, dataType = null) {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-    
-    // 로그 출력 시 data가 null이거나 undefined일 경우를 대비해 안전하게 체크
-    let countLog = 'Empty';
-    if (Array.isArray(data)) {
-        countLog = `${data.length} items`;
-    } else if (data && typeof data === 'object') {
-        countLog = data.items ? `${data.items.length} items` : 'Object';
-    }
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 
-    console.log(`✅ [저장 완료] 경로: ${filePath} (${countLog})`);
-    
-    if (dataType) {
-        broadcastUpdate(dataType);
+        // 로그 출력 시 data가 null이거나 undefined일 경우를 대비해 안전하게 체크
+        let countLog = 'Empty';
+        if (Array.isArray(data)) {
+            countLog = `${data.length} items`;
+        } else if (data && typeof data === 'object') {
+            countLog = data.items ? `${data.items.length} items` : 'Object';
+        }
+
+        console.log(`✅ [저장 완료] 경로: ${filePath} (${countLog})`);
+
+        if (dataType) {
+            broadcastUpdate(dataType);
+        }
+    } catch (error) {
+        console.error(`❌ [저장 실패] 경로: ${filePath}`, error);
     }
-  } catch (error) {
-    console.error(`❌ [저장 실패] 경로: ${filePath}`, error);
-  }
 }
 
 // loadData 함수
 function loadData(filePath, defaultValue) {
-  try {
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(raw);
+    try {
+        if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(raw);
+        }
+        saveData(filePath, defaultValue, null);
+        return defaultValue;
+    } catch (error) {
+        console.error(`❌ Error loading ${filePath}:`, error);
+        return defaultValue;
     }
-    saveData(filePath, defaultValue, null);
-    return defaultValue;
-  } catch (error) {
-    console.error(`❌ Error loading ${filePath}:`, error);
-    return defaultValue;
-  }
 }
 
 function createMainWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-  const windowWidth = 420;
-  const windowHeight = 700;
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+    const windowWidth = 420;
+    const windowHeight = 700;
 
-  mainWindow = new BrowserWindow({
-    width: windowWidth,
-    height: windowHeight,
-    x: width - windowWidth - 20,
-    y: height - windowHeight - 20,
-    frame: false,
-    transparent: true,
-    hasShadow: true,
-    resizable: false,
-    show: false,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: false // 로컬 이미지 로드 허용
-    },
-  });
 
-  mainWindow.loadURL(`http://localhost:5173/?theme=${currentThemeMode}`);
+    mainWindow = new BrowserWindow({
+        width: windowWidth,
+        height: windowHeight,
+        x: width - windowWidth - 20,
+        y: height - windowHeight - 20,
+        frame: false,
+        transparent: true,
+        hasShadow: true,
+        resizable: false,
+        show: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            webSecurity: false // 로컬 이미지 로드 허용
+        },
+    });
 
-  mainWindow.on('ready-to-show', () => mainWindow.show());
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
-  });
+    mainWindow.loadURL(`http://localhost:5173/?theme=${currentThemeMode}`);
+
+    mainWindow.on('ready-to-show', () => mainWindow.show());
+    mainWindow.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
+            mainWindow.hide();
+        }
+    });
 }
 
 function createDashboardWindow() {
     if (dashboardWindow !== null) {
-      dashboardWindow.show();
-      dashboardWindow.focus();
-      return;
+        dashboardWindow.show();
+        dashboardWindow.focus();
+        return;
     }
-    
+
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
     const windowWidth = Math.floor(width * 0.8);
@@ -140,12 +143,17 @@ function createDashboardWindow() {
         height: windowHeight,
         x: Math.floor(width * 0.1),
         y: Math.floor(height * 0.1),
+
+        // 🌟 [추가] 최소 크기 설정 (이 크기 이하로 줄어들지 않음)
+        minWidth: 1280,  // 툴바가 깨지지 않는 최소 너비
+        minHeight: 600,  // 최소 높이
+
         frame: false,
         backgroundColor: initialBgColor,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
-            webSecurity: false 
+            webSecurity: false
         },
     });
 
@@ -161,40 +169,40 @@ function createDashboardWindow() {
         dashboardWindow.show();
         dashboardWindow.webContents.send('window-maximized-state', dashboardWindow.isMaximized());
     });
-    
+
     dashboardWindow.on('closed', () => { dashboardWindow = null; });
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '../public/tray.png');
-  const trayIcon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
-  
-  tray = new Tray(trayIcon);
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '챗봇 열기', click: () => mainWindow.show() },
-    { label: '대시보드 열기', click: () => createDashboardWindow() },
-    { type: 'separator' },
-    { label: '종료', click: () => { isQuitting = true; app.quit(); }}
-  ]);
-  tray.setToolTip('AI Partner Pro');
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show());
+    const iconPath = path.join(__dirname, '../public/tray.png');
+    const trayIcon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+
+    tray = new Tray(trayIcon);
+    const contextMenu = Menu.buildFromTemplate([
+        { label: '챗봇 열기', click: () => mainWindow.show() },
+        { label: '대시보드 열기', click: () => createDashboardWindow() },
+        { type: 'separator' },
+        { label: '종료', click: () => { isQuitting = true; app.quit(); } }
+    ]);
+    tray.setToolTip('AI Partner Pro');
+    tray.setContextMenu(contextMenu);
+    tray.on('click', () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show());
 }
 
 app.on('ready', () => {
-  createMainWindow();
-  createTray();
+    createMainWindow();
+    createTray();
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    isQuitting = true;
-    app.quit();
-  }
+    if (process.platform !== 'darwin') {
+        isQuitting = true;
+        app.quit();
+    }
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
 });
 
 // --- IPC 핸들러 ---
@@ -292,7 +300,7 @@ ipcMain.handle('select-image', async () => {
         filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'jpeg', 'webp'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0]; 
+    return result.filePaths[0];
 });
 
 ipcMain.on('minimize-window', () => mainWindow.minimize());
@@ -315,12 +323,12 @@ ipcMain.on('dashboard-close', () => dashboardWindow && dashboardWindow.close());
 ipcMain.handle('load-settings', () => loadData(DATA_PATHS.settings, {
     shiftBaseDate: "2025-03-05",
     shiftPattern: [
-        "주간 근무","주간 근무","휴무","휴무","휴무",
-        "야간 근무","야간 근무","휴무","휴무",
-        "주간 근무","주간 근무","주간 근무","휴무","휴무",
-        "야간 근무","야간 근무","휴무","휴무","휴무",
-        "주간 근무","주간 근무","휴무","휴무",
-        "야간 근무","야간 근무","야간 근무","휴무","휴무",
+        "주간 근무", "주간 근무", "휴무", "휴무", "휴무",
+        "야간 근무", "야간 근무", "휴무", "휴무",
+        "주간 근무", "주간 근무", "주간 근무", "휴무", "휴무",
+        "야간 근무", "야간 근무", "휴무", "휴무", "휴무",
+        "주간 근무", "주간 근무", "휴무", "휴무",
+        "야간 근무", "야간 근무", "야간 근무", "휴무", "휴무",
     ]
 }));
 ipcMain.on('save-settings', (event, data) => {
@@ -348,9 +356,9 @@ ipcMain.handle('search-naver-books', async (event, query) => {
                 try {
                     if (res.statusCode === 200) {
                         const parsed = JSON.parse(data);
-                        resolve(parsed.items || []); 
+                        resolve(parsed.items || []);
                     } else {
-                        resolve([]); 
+                        resolve([]);
                     }
                 } catch (e) {
                     resolve([]);
@@ -368,7 +376,7 @@ ipcMain.handle('select-pdf', async () => {
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0]; 
+    return result.filePaths[0];
 });
 
 ipcMain.on('open-local-file', (event, filePath) => {
@@ -379,9 +387,9 @@ ipcMain.handle('extract-pdf-text', async (event, filePath) => {
     try {
         const dataBuffer = fs.readFileSync(filePath);
         const data = await pdfParse(dataBuffer);
-        return data.text; 
+        return data.text;
     } catch (error) {
-        return ""; 
+        return "";
     }
 });
 
@@ -392,9 +400,9 @@ ipcMain.handle('select-any-file', async () => {
         filters: [{ name: 'All Files', extensions: ['*'] }]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return { 
-        filePath: result.filePaths[0], 
-        fileName: path.basename(result.filePaths[0]) 
+    return {
+        filePath: result.filePaths[0],
+        fileName: path.basename(result.filePaths[0])
     };
 });
 
@@ -409,8 +417,13 @@ ipcMain.on('save-custom-widgets', (event, data) => {
 
 // 🟢 [추가] 파일 열기 요청 처리
 ipcMain.on('open-path', (event, path) => {
-  // shell.openPath는 파일이나 바로가기를 기본 프로그램으로 실행합니다.
-  shell.openPath(path).then((error) => {
-      if (error) console.error('Failed to open path:', error);
-  });
+    // shell.openPath는 파일이나 바로가기를 기본 프로그램으로 실행합니다.
+    shell.openPath(path).then((error) => {
+        if (error) console.error('Failed to open path:', error);
+    });
+});
+
+ipcMain.on('save-map-data', (event, data) => {
+    // mapData.json은 단순 배열이 아니라 구조가 있을 수 있으므로 그대로 저장
+    saveData(DATA_PATHS.mapData, data, 'mapData');
 });

@@ -1,53 +1,113 @@
-{
-    "2F": [],
-    "1F": [
-        { "id": 1766672583278, "type": "DOOR", "x": 50, "z": 0, "rotation": 1.5707963267948966, "scale": 3, "label": "지역난방설비동 방면 출입문", "status": "NORMAL" },
-        { "id": 1766672590947, "type": "DOOR", "x": 35, "z": 50, "rotation": 3.141592653589793, "scale": 3, "label": "#1 GT Gas Skid 방면 출입문", "status": "NORMAL" },
-        { "id": 1766672597907, "type": "DOOR", "x": -27, "z": 50, "rotation": 3.141592653589793, "scale": 3, "label": "Heat Pump 방면 출입문", "status": "NORMAL" },
-        { "id": 1766672612071, "type": "DOOR", "x": -22, "z": -50, "rotation": 3.141592653589793, "scale": 3, "label": "창고정비동 방면 출입문", "status": "NORMAL" },
-        { "id": 1766672639615, "type": "PUMP_HORIZ", "x": 44, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766672640467, "type": "PUMP_HORIZ", "x": 37, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766672689323, "type": "STAIRS", "x": 38, "z": 43, "rotation": 1.5707963267948966, "scale": 1.5, "label": "#3 DH Heater 방면 계단", "status": "NORMAL" },
-        { "id": 1766672704675, "type": "PUMP_HORIZ", "x": 30, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766672721683, "type": "HX_PLATE", "x": -9, "z": -30, "rotation": 3.141592653589793, "scale": 2, "label": "#1 Cooling Water Heat Exchanger", "status": "NORMAL" },
-        { "id": 1766672757939, "type": "HX_PLATE", "x": -18, "z": -30, "rotation": 3.141592653589793, "scale": 2, "label": "#2 Cooling Water Heat Exchanger", "status": "NORMAL" },
-        { "id": 1766672766478, "type": "PUMP_HORIZ", "x": -35, "z": -8, "rotation": 1.5707963267948966, "scale": 2, "label": "#2 Secondary Cooling Water Pump", "status": "NORMAL" },
-        { "id": 1766672768947, "type": "PUMP_HORIZ", "x": -35, "z": -30, "rotation": 1.5707963267948966, "scale": 2, "label": "#1 Secondary Cooling Water Pump", "status": "NORMAL" },
-        { "id": 1766678839545, "type": "STAIRS", "x": 18, "y": -2, "z": 15, "rotation": 0, "scale": 1, "label": "지하 1층 계단", "status": "NORMAL" },
-        { "id": 1766678857277, "type": "STAIRS", "x": -45, "y": 0, "z": 20, "rotation": 3.141592653589793, "scale": 1, "label": "ST 3상분리모선 방면 계단", "status": "NORMAL" },
-        { "id": 1766678938905, "type": "STAIRS", "x": -40, "y": 5, "z": 9, "rotation": 0, "scale": 1, "label": "", "status": "NORMAL" },
-        { "id": 1766679037619, "type": "HX_SHELL", "x": -20, "y": 3, "z": 25, "rotation": 0, "scale": 0.9, "label": "Drain Cooler", "status": "NORMAL" },
-        { "id": 1766679063179, "type": "TANK", "x": -11, "y": 2.5, "z": 30, "rotation": 0, "scale": 1.5, "label": "Condensate Drain Tank", "status": "NORMAL" },
-        { "id": 1766679091666, "type": "VALVE_PIN", "x": -43, "y": 1, "z": -35, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679094916, "type": "VALVE_PIN", "x": -43, "y": 1, "z": -17, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679350607, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -15, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679351487, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -12, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679352729, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -9, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679362807, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -6, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679372183, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 7, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679373995, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 10, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679375502, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 13, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679377503, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 16, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679444455, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 19, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679766514, "type": "LADDER", "x": -5, "y": 0, "z": 27, "rotation": 0, "scale": 1, "label": "", "status": "NORMAL" },
-        { "id": 1766679821031, "type": "VALVE_PIN", "x": -7, "y": 5, "z": 26, "rotation": 0, "scale": 0.5, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766680576181, "type": "HX_SHELL", "x": 1, "y": 0, "z": 1, "rotation": -1.5707963267948966, "scale": 2, "label": "#1 DH Heater", "status": "NORMAL" }
-    ],
-    "B1": [
-        { "id": 1766679123780, "type": "STAIRS", "x": 21, "y": 0, "z": 12, "rotation": 0, "scale": 0.9, "label": "New STAIRS", "status": "NORMAL" },
-        { "id": 1766679130550, "type": "PUMP_VERT", "x": 2, "y": 0, "z": 8, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679131691, "type": "PUMP_VERT", "x": 2, "y": 0, "z": 0, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679132650, "type": "PUMP_VERT", "x": 2, "y": 0, "z": -8, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679133875, "type": "PUMP_VERT", "x": 2, "y": 0, "z": -15, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679141739, "type": "VALVE_PIN", "x": 7, "y": 0, "z": 8, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679143022, "type": "VALVE_PIN", "x": 7, "y": 0, "z": 0, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679144791, "type": "VALVE_PIN", "x": 7, "y": 0, "z": -8, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679146907, "type": "VALVE_PIN", "x": 7, "y": 0, "z": -15, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679236330, "type": "PUMP_HORIZ", "x": -6, "y": 0, "z": 22, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679239867, "type": "PUMP_HORIZ", "x": -6, "y": 0, "z": 18, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679250111, "type": "VALVE_PIN", "x": -1, "y": 0, "z": 27, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679252126, "type": "VALVE_PIN", "x": 5, "y": 0, "z": 26, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
-        { "id": 1766679263979, "type": "PUMP_VERT", "x": -13, "y": 0, "z": -25, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
-        { "id": 1766679265814, "type": "PUMP_VERT", "x": -9, "y": 0, "z": -25, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" }
+[
+  {
+    "id": "STEAM",
+    "name": "스팀터빈동",
+    "floors": [
+      {
+        "id": "B1",
+        "label": "지하 1층 (B1)",
+        "valves": [
+          { "id": 1766679123780, "type": "STAIRS", "x": 21, "y": 0, "z": 12, "rotation": 0, "scale": 0.9, "label": "New STAIRS", "status": "NORMAL" },
+          { "id": 1766679130550, "type": "PUMP_VERT", "x": 2, "y": 0, "z": 8, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679131691, "type": "PUMP_VERT", "x": 2, "y": 0, "z": 0, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679132650, "type": "PUMP_VERT", "x": 2, "y": 0, "z": -8, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679133875, "type": "PUMP_VERT", "x": 2, "y": 0, "z": -15, "rotation": 0, "scale": 0.9, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679141739, "type": "VALVE_PIN", "x": 7, "y": 0, "z": 8, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679143022, "type": "VALVE_PIN", "x": 7, "y": 0, "z": 0, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679144791, "type": "VALVE_PIN", "x": 7, "y": 0, "z": -8, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679146907, "type": "VALVE_PIN", "x": 7, "y": 0, "z": -15, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679236330, "type": "PUMP_HORIZ", "x": -6, "y": 0, "z": 22, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679239867, "type": "PUMP_HORIZ", "x": -6, "y": 0, "z": 18, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679250111, "type": "VALVE_PIN", "x": -1, "y": 0, "z": 27, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679252126, "type": "VALVE_PIN", "x": 5, "y": 0, "z": 26, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679263979, "type": "PUMP_VERT", "x": -13, "y": 0, "z": -25, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766679265814, "type": "PUMP_VERT", "x": -9, "y": 0, "z": -25, "rotation": 0, "scale": 0.6, "label": "New PUMP", "status": "NORMAL" }
+        ]
+      },
+      {
+        "id": "1F",
+        "label": "1층 (1F)",
+        "valves": [
+          { "id": 1766672583278, "type": "DOOR", "x": 50, "z": 0, "rotation": 1.5707963267948966, "scale": 3, "label": "지역난방설비동 방면 출입문", "status": "NORMAL" },
+          { "id": 1766672590947, "type": "DOOR", "x": 35, "z": 50, "rotation": 3.141592653589793, "scale": 3, "label": "#1 GT Gas Skid 방면 출입문", "status": "NORMAL" },
+          { "id": 1766672597907, "type": "DOOR", "x": -27, "z": 50, "rotation": 3.141592653589793, "scale": 3, "label": "Heat Pump 방면 출입문", "status": "NORMAL" },
+          { "id": 1766672612071, "type": "DOOR", "x": -22, "z": -50, "rotation": 3.141592653589793, "scale": 3, "label": "창고정비동 방면 출입문", "status": "NORMAL" },
+          { "id": 1766672639615, "type": "PUMP_HORIZ", "x": 44, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766672640467, "type": "PUMP_HORIZ", "x": 37, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766672689323, "type": "STAIRS", "x": 38, "z": 43, "rotation": 1.5707963267948966, "scale": 1.5, "label": "#3 DH Heater 방면 계단", "status": "NORMAL" },
+          { "id": 1766672704675, "type": "PUMP_HORIZ", "x": 30, "z": -45, "rotation": 4.71238898038469, "scale": 1.5, "label": "New PUMP", "status": "NORMAL" },
+          { "id": 1766672721683, "type": "HX_PLATE", "x": -9, "z": -30, "rotation": 3.141592653589793, "scale": 2, "label": "#1 Cooling Water Heat Exchanger", "status": "NORMAL" },
+          { "id": 1766672757939, "type": "HX_PLATE", "x": -18, "z": -30, "rotation": 3.141592653589793, "scale": 2, "label": "#2 Cooling Water Heat Exchanger", "status": "NORMAL" },
+          { "id": 1766672766478, "type": "PUMP_HORIZ", "x": -35, "z": -8, "rotation": 1.5707963267948966, "scale": 2, "label": "#2 Secondary Cooling Water Pump", "status": "NORMAL" },
+          { "id": 1766672768947, "type": "PUMP_HORIZ", "x": -35, "z": -30, "rotation": 1.5707963267948966, "scale": 2, "label": "#1 Secondary Cooling Water Pump", "status": "NORMAL" },
+          { "id": 1766678839545, "type": "STAIRS", "x": 18, "y": -2, "z": 15, "rotation": 0, "scale": 1, "label": "지하 1층 계단", "status": "NORMAL" },
+          { "id": 1766678857277, "type": "STAIRS", "x": -45, "y": 0, "z": 20, "rotation": 3.141592653589793, "scale": 1, "label": "ST 3상분리모선 방면 계단", "status": "NORMAL" },
+          { "id": 1766678938905, "type": "STAIRS", "x": -40, "y": 5, "z": 9, "rotation": 0, "scale": 1, "label": "", "status": "NORMAL" },
+          { "id": 1766679037619, "type": "HX_SHELL", "x": -20, "y": 3, "z": 25, "rotation": 0, "scale": 0.9, "label": "Drain Cooler", "status": "NORMAL" },
+          { "id": 1766679063179, "type": "TANK", "x": -11, "y": 2.5, "z": 30, "rotation": 0, "scale": 1.5, "label": "Condensate Drain Tank", "status": "NORMAL" },
+          { "id": 1766679091666, "type": "VALVE_PIN", "x": -43, "y": 1, "z": -35, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679094916, "type": "VALVE_PIN", "x": -43, "y": 1, "z": -17, "rotation": 0, "scale": 0.9, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679350607, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -15, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679351487, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -12, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679352729, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -9, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679362807, "type": "VALVE_PIN", "x": 28, "y": 0, "z": -6, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679372183, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 7, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679373995, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 10, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679375502, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 13, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679377503, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 16, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679444455, "type": "VALVE_PIN", "x": 45, "y": 0, "z": 19, "rotation": 0, "scale": 0.6, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766679766514, "type": "LADDER", "x": -5, "y": 0, "z": 27, "rotation": 0, "scale": 1, "label": "", "status": "NORMAL" },
+          { "id": 1766679821031, "type": "VALVE_PIN", "x": -7, "y": 5, "z": 26, "rotation": 0, "scale": 0.5, "label": "New VALVE", "status": "NORMAL" },
+          { "id": 1766680576181, "type": "HX_SHELL", "x": 1, "y": 0, "z": 1, "rotation": -1.5707963267948966, "scale": 2, "label": "#1 DH Heater", "status": "NORMAL" }
+        ]
+      },
+      {
+        "id": "2F",
+        "label": "2층 (2F)",
+        "valves": []
+      },
+      {
+        "id": "3F",
+        "label": "3층 (3F)",
+        "valves": []
+      }
     ]
-}
+  },
+  {
+    "id": "DH",
+    "name": "지역난방설비동",
+    "floors": [
+      {
+        "id": "1F",
+        "label": "1층 (1F)",
+        "valves": []
+      },
+      {
+        "id": "2F",
+        "label": "2층 (2F)",
+        "valves": []
+      }
+    ]
+  },
+  {
+    "id": "HRSG",
+    "name": "배열회수보일러동",
+    "floors": [
+      {
+        "id": "1F",
+        "label": "1층 (1F)",
+        "valves": []
+      },
+      {
+        "id": "2F",
+        "label": "2층 (2F)",
+        "valves": []
+      },
+      {
+        "id": "RF",
+        "label": "최상부층 (RF)",
+        "valves": []
+      }
+    ]
+  }
+]
