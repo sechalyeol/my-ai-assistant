@@ -1,11 +1,11 @@
-﻿// Last Updated: 2025-12-30 14:52:43
+﻿// Last Updated: 2025-12-30 15:59:37
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
 import {
     Database, LayoutTemplate, MousePointer2, Edit3,
     Save, X, Search, ChevronRight, ChevronDown,
-    Trash2, Plus, Building, Layers, Check, Eye
+    Trash2, Plus, Building, Layers, Check, Eye, MapPin, Box
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -128,11 +128,12 @@ const Label = ({ text, selected, hovered, height, forceShow }) => {
     if (!isVisible) return null;
 
     return (
-        <Html position={[0, height + 0.5, 0]} center zIndexRange={[100, 0]}>
+        // 👇 [수정] zIndexRange를 [100, 0] -> [40, 0]으로 변경
+        <Html position={[0, height + 0.5, 0]} center zIndexRange={[40, 0]}>
             <div className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-all whitespace-nowrap shadow-sm backdrop-blur-sm pointer-events-none select-none
-                ${selected ? 'bg-indigo-600 text-white border-indigo-400 scale-110 z-50' : 
-                  forceShow ? 'bg-indigo-900/80 text-white border-indigo-500/50 z-20' : 
-                  'bg-black/70 text-white border-white/20 z-10'}`}>
+                ${selected ? 'bg-indigo-600 text-white border-indigo-400 scale-110 z-50' :
+                    forceShow ? 'bg-indigo-900/80 text-white border-indigo-500/50 z-20' :
+                        'bg-black/70 text-white border-white/20 z-10'}`}>
                 {text}
             </div>
         </Html>
@@ -145,7 +146,7 @@ const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
 
     return (
         <div className="absolute top-4 left-4 z-20 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg flex flex-col w-48 transition-all animate-fade-in-left">
-            <button 
+            <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center justify-between p-3 w-full text-left border-b border-zinc-100 dark:border-zinc-800"
             >
@@ -155,7 +156,7 @@ const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
                 </div>
                 <ChevronDown size={14} className={`text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
-            
+
             {isOpen && (
                 <div className="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
                     {categories.map(cat => (
@@ -163,8 +164,8 @@ const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
                             key={cat}
                             onClick={() => onToggle(cat)}
                             className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs transition-colors
-                                ${visibleState[cat] 
-                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium' 
+                                ${visibleState[cat]
+                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
                         >
                             <div className={`w-3 h-3 rounded border flex items-center justify-center transition-colors
@@ -1096,10 +1097,10 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
     const currentOptionLabel = typeOptions.find(opt => opt.type === item.type)?.label || item.label;
 
     return (
-        <div className="absolute top-20 right-4 w-72 bg-white/95 dark:bg-zinc-900/95 backdrop-blur shadow-2xl rounded-2xl border border-zinc-200 dark:border-zinc-700 p-5 z-20 animate-fade-in-right">
+        <div className="absolute top-8 right-4 w-72 bg-white/95 dark:bg-zinc-900/95 backdrop-blur shadow-2xl rounded-2xl border border-zinc-200 dark:border-zinc-700 p-5 z-[150] animate-fade-in-right max-h-[85vh] overflow-y-auto custom-scrollbar">
 
             {/* 헤더 */}
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800 sticky top-0 bg-white/95 dark:bg-zinc-900/95 z-10 backdrop-blur">
                 <h3 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
                     <Edit3 size={16} className="text-indigo-500" /> 속성 편집
                 </h3>
@@ -1247,15 +1248,18 @@ const FieldMapContainer = ({ workData }) => {
         return group ? group.children.map(c => c.label) : [];
     }, []);
 
-    // 필터 토글 핸들러
+    const [visibleLabels, setVisibleLabels] = useState({});
+
+    // 🌟 [New] 검색 결과 관리를 위한 상태
+    const [searchResults, setSearchResults] = useState([]); // 검색된 설비 목록 ({id, label, building, floor...})
+    const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false); // 검색 결과 패널 표시 여부
+
     const toggleLabelVisibility = (category) => {
         setVisibleLabels(prev => ({
             ...prev,
             [category]: !prev[category]
         }));
     };
-
-    const [visibleLabels, setVisibleLabels] = useState({});
 
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -1371,34 +1375,66 @@ const FieldMapContainer = ({ workData }) => {
     }, [selectedId, currentStorageKey, clipboard, allFloorData, editMode]);
 
     const handleSearch = () => {
-        if (!searchInput.trim()) { setSearchIds([]); return; }
+        if (!searchInput.trim()) {
+            setSearchIds([]);
+            setSearchResults([]);
+            setIsSearchPanelOpen(false);
+            return;
+        }
         const term = searchInput.toLowerCase();
-        let firstMatchKey = null;
+        const results = [];
         const newSearchIds = [];
 
+        // 모든 층의 데이터를 순회하며 검색
         Object.keys(allFloorData).forEach(key => {
-            const matches = allFloorData[key].filter(item => item.label && item.label.toLowerCase().includes(term));
-            if (matches.length > 0) {
-                if (!firstMatchKey) firstMatchKey = key;
-                matches.forEach(m => newSearchIds.push(m.id));
-            }
+            // key는 "BUILDING_ID-FLOOR_ID" 형식
+            const [bId, fId] = key.split('-');
+
+            // 해당 층의 데이터에서 검색
+            const matches = allFloorData[key].filter(item =>
+                item.label && item.label.toLowerCase().includes(term)
+            );
+
+            // 결과 추가
+            matches.forEach(item => {
+                results.push({
+                    ...item,
+                    buildingId: bId,
+                    floorId: fId,
+                    uniqueKey: key,
+                    buildingName: BUILDING_STRUCTURE.find(b => b.id === bId)?.name || bId
+                });
+                newSearchIds.push(item.id);
+            });
         });
 
-        if (newSearchIds.length > 0) {
-            setSearchIds(newSearchIds);
+        if (results.length > 0) {
+            setSearchIds(newSearchIds); // 전체 맵에서의 하이라이트용 (현재 층에 있는 것만 보임)
+            setSearchResults(results);  // 결과 리스트용
+            setIsSearchPanelOpen(true); // 결과 패널 열기
             setSelectedId(null);
-            const currentFloorHasMatch = (allFloorData[currentStorageKey] || []).some(item => newSearchIds.includes(item.id));
-            if (!currentFloorHasMatch && firstMatchKey) {
-                const [bId, fId] = firstMatchKey.split('-');
-                if (bId && fId) {
-                    setActiveBuildingId(bId);
-                    setActiveFloorId(fId);
-                }
-            }
         } else {
             alert("검색 결과가 없습니다.");
             setSearchIds([]);
+            setSearchResults([]);
+            setIsSearchPanelOpen(false);
         }
+    };
+
+    // 🌟 [New] 검색 결과 항목 클릭 핸들러
+    const handleSelectResult = (result) => {
+        // 1. 해당 건물과 층으로 이동
+        setActiveBuildingId(result.buildingId);
+        setActiveFloorId(result.floorId);
+
+        // 2. 해당 설비 선택 (하이라이트 및 속성 패널 표시)
+        setSelectedId(result.id);
+
+        // 3. (선택 사항) 카메라 이동 로직이 있다면 여기서 호출
+        // if (orbitControlsRef.current) { ... }
+
+        // 4. 패널 닫기 (원하면 유지해도 됨)
+        setIsSearchPanelOpen(false);
     };
 
     const handleSave = async () => {
@@ -1539,7 +1575,8 @@ const FieldMapContainer = ({ workData }) => {
 
     return (
         <div className="h-full flex flex-col bg-zinc-100 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
-            <div className="flex flex-col border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-10 shrink-0">
+            {/* 기존 z-10 을 z-50 으로 변경 */}
+            <div className="flex flex-col border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-50 shrink-0">
                 <div className="flex gap-1 p-2 overflow-x-auto scrollbar-hide border-b border-zinc-100 dark:border-zinc-800">
                     {BUILDING_STRUCTURE.map((building) => (
                         <button
@@ -1592,7 +1629,40 @@ const FieldMapContainer = ({ workData }) => {
                                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                     placeholder="설비 검색..."
                                     className="w-full pl-8 pr-2 py-1.5 text-xs font-bold bg-zinc-100 dark:bg-zinc-800 rounded-lg border-none outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-zinc-900 dark:text-zinc-100"
-                                />
+                                />{/* 👇 [수정] z-50 -> z-[100]으로 변경하여 최상위 노출 보장 */}
+                                {isSearchPanelOpen && searchResults.length > 0 && (
+                                    <div
+                                        className="absolute top-full left-0 mt-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-fade-in-down max-h-64 overflow-y-auto"
+                                        style={{
+                                            width: '400px',     /* 너비 강제 고정 (원하는 크기로 조절 가능) */
+                                            zIndex: 9999        /* Z-Index 최상위 강제 지정 */
+                                        }}
+                                    >
+                                        <div className="p-1">
+                                            <div className="flex justify-between items-center px-3 py-2 border-b border-zinc-100 dark:border-zinc-800">
+                                                <span className="text-[10px] font-bold text-zinc-500">검색 결과 ({searchResults.length})</span>
+                                                <button onClick={() => setIsSearchPanelOpen(false)}><X size={12} className="text-zinc-400" /></button>
+                                            </div>
+                                            {searchResults.map((result) => (
+                                                <button
+                                                    key={result.id + result.uniqueKey}
+                                                    onClick={() => handleSelectResult(result)}
+                                                    className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg group transition-colors border-b border-zinc-50 dark:border-zinc-800 last:border-0"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                                                            {result.label || "이름 없는 설비"}
+                                                        </span>
+                                                        <span className="text-[10px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                            <MapPin size={10} />
+                                                            {result.buildingName} {result.floorId}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex-1"></div>
                         </>

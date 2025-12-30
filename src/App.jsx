@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-30 14:52:43
+﻿// Last Updated: 2025-12-30 15:59:37
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -981,53 +981,56 @@ ${contextText.substring(0, 6000)}
 }
 
 const searchEquipmentForChat = (userQuery, mapData) => {
-    // 1. 키워드 추출
+    // 1. 키워드 추출 (3글자 이상 영문/숫자/하이픈)
+    // "7010", "HV-100", "Pump" 등을 잡기 위함
     const match = userQuery.match(/[a-zA-Z0-9-]{3,}/);
     if (!match) return null;
     
     const keyword = match[0];
-    const foundResults = [];
+    const allFoundItems = []; // 🌟 모든 층의 결과를 담을 단일 리스트
 
     // 2. 데이터 검색
     if (Array.isArray(mapData)) {
         mapData.forEach(building => {
             if (!building.floors) return;
+            
             building.floors.forEach(floor => {
                 if (!floor.valves) return;
                 
-                // 검색어와 일치하는 설비 찾기
+                // 해당 층에서 검색어와 일치하는 설비 찾기
                 const matches = floor.valves.filter(item => 
                     item.label && item.label.includes(keyword)
                 );
 
+                // 찾은 설비들을 전체 리스트에 추가
                 if (matches.length > 0) {
-                    // 🌟 [핵심] 검색된 설비가 있는 '층 전체 데이터'를 함께 저장
-                    foundResults.push({
-                        building: building.name || building.id,
-                        floor: floor.id,
-                        foundItems: matches.map(m => ({ ...m, x: Number(m.x), z: Number(m.z), y: Number(m.y) || 0 })),
-                        // 해당 층의 모든 설비를 컨텍스트로 추가 (위치 참조용)
-                        allItems: floor.valves.map(m => ({ ...m, x: Number(m.x), z: Number(m.z), y: Number(m.y) || 0 }))
+                    matches.forEach(item => {
+                        allFoundItems.push({
+                            ...item,
+                            // 좌표 숫자 변환 (안전을 위해)
+                            x: Number(item.x),
+                            y: Number(item.y) || 0,
+                            z: Number(item.z),
+                            
+                            // 🌟 [핵심] 위젯이 바로 알 수 있게 건물/층 정보를 주입
+                            buildingName: building.name || building.id,
+                            floorName: floor.label || floor.id,
+                            floorId: floor.id
+                        });
                     });
                 }
             });
         });
     }
 
-    if (foundResults.length === 0) return null;
+    // 검색 결과가 없으면 null 반환 (일반 대화로 넘어감)
+    if (allFoundItems.length === 0) return null;
 
-    // 3. 가장 첫 번째 검색 결과(층)를 메인으로 사용
-    const targetResult = foundResults[0];
-
+    // 3. 전체 결과 반환
     return {
-        type: 'equipment-search',
+        type: 'equipment', // App.jsx에서 처리할 메시지 타입
         keyword: keyword,
-        // 위젯에 전달할 데이터 구성
-        building: targetResult.building,
-        floor: targetResult.floor,
-        foundItems: targetResult.foundItems,
-        allItems: targetResult.allItems // 전체 설비 데이터 전달
+        foundItems: allFoundItems // 🌟 [0]번만 보내지 않고 전체 리스트 전송
     };
 };
-
 export default App;

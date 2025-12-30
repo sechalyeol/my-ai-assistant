@@ -1,5 +1,5 @@
-﻿// Last Updated: 2025-12-30 14:52:43
-import React, { useState } from 'react';
+﻿// Last Updated: 2025-12-30 15:59:37
+import React, { useState, useMemo } from 'react';
 import { 
     Calendar as CalendarIcon, 
     Wallet, 
@@ -9,68 +9,105 @@ import {
     ChevronRight, 
     Menu, 
     Link as LinkIcon, 
-    ExternalLink 
+    ExternalLink,
+    MapPin, 
+    Box,
+    Map as MapIcon,
+    List,
+    ArrowLeft
 } from 'lucide-react';
 
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Center, Float } from '@react-three/drei';
 import * as THREE from 'three';
-import { MapPin, Box } from 'lucide-react'; // 아이콘 추가
 
+import mapData from '../../data/mapData.json';
+
+// ----------------------------------------------------------------------
+// 1. 설비 채팅 위젯 (개선됨: 리스트 -> 맵 상세 보기)
+// ----------------------------------------------------------------------
 export const EquipmentChatWidget = ({ data }) => {
-    const [showMap, setShowMap] = useState(false);
-    const { keyword, foundItems, allItems, building, floor } = data;
+    // data.foundItems: 검색된 설비 목록
+    const foundItems = data.foundItems || [];
+    const [selectedItem, setSelectedItem] = useState(null); // 현재 지도 볼 아이템
 
-    // 카메라 포커싱을 위한 중심점 계산
-    const centerPos = foundItems.length > 0 
-        ? { 
-            x: foundItems.reduce((acc, item) => acc + item.x, 0) / foundItems.length, 
-            z: foundItems.reduce((acc, item) => acc + item.z, 0) / foundItems.length 
-          }
-        : { x: 0, z: 0 };
+    // 🌟 선택된 아이템의 층 정보와 주변 설비들(Context) 찾기
+    const mapContext = useMemo(() => {
+        if (!selectedItem) return null;
 
-    // 📦 [내부 컴포넌트] 간단한 3D 객체 렌더러 (타입별 모양 구분)
+        // mapData 전체를 뒤져서 해당 아이템이 있는 층(Floor) 데이터를 찾습니다.
+        for (const b of mapData) {
+            for (const f of b.floors) {
+                const target = (f.valves || []).find(v => v.id === selectedItem.id);
+                if (target) {
+                    return {
+                        buildingName: b.name,
+                        floorName: f.label,
+                        allItems: f.valves, // 그 층의 모든 설비 (배경용)
+                        targetItem: target
+                    };
+                }
+            }
+        }
+        return null;
+    }, [selectedItem]);
+
+    // 📦 3D 객체 렌더러 (고스트 모드)
     const GhostObject = ({ item, isTarget }) => {
-        const color = isTarget ? "#ef4444" : "#cbd5e1"; // 타겟: 빨강, 배경: 회색
-        const opacity = isTarget ? 1.0 : 0.3;           // 타겟: 불투명, 배경: 반투명
-        const scale = isTarget ? 1.2 : 1.0;
+        const color = isTarget ? "#ef4444" : "#94a3b8"; // 타겟: 빨강, 나머지: 회색
+        const opacity = isTarget ? 1.0 : 0.2;           // 타겟: 선명, 나머지: 흐릿
+        const scale = isTarget ? 1.5 : 1.0;             // 타겟: 좀 더 크게
 
-        // 타입에 따라 대략적인 모양 결정
+        // 타입별 대략적인 모양
         let Geometry = <boxGeometry args={[1, 1, 1]} />;
         let yOffset = 0.5;
 
         if (item.type.includes('TANK')) {
-            Geometry = <cylinderGeometry args={[1.5, 1.5, 3]} />;
+            Geometry = <cylinderGeometry args={[1.2, 1.2, 3, 16]} />;
             yOffset = 1.5;
         } else if (item.type.includes('PUMP')) {
-            Geometry = <boxGeometry args={[2, 1, 1]} />;
-            yOffset = 0.5;
+            Geometry = <boxGeometry args={[2, 0.8, 0.8]} />;
+            yOffset = 0.4;
         } else if (item.type.includes('STAIRS')) {
-            Geometry = <boxGeometry args={[3, 4, 3]} />;
+            Geometry = <boxGeometry args={[2, 4, 1]} />;
             yOffset = 2;
         } else if (item.type.includes('VALVE')) {
-            Geometry = <sphereGeometry args={[0.4]} />;
-            yOffset = 0.5;
+            Geometry = <sphereGeometry args={[0.4, 16, 16]} />;
+            yOffset = 0.4;
+        } else if (item.type.includes('DOOR') || item.type.includes('SHUTTER')) {
+             Geometry = <boxGeometry args={[3, 3, 0.2]} />;
+             yOffset = 1.5;
         }
 
         return (
-            <group position={[item.x, item.y || 0, item.z]} scale={[scale, scale, scale]}>
+            <group 
+                position={[item.x, item.y || 0, item.z]} 
+                rotation={[0, item.rotation || 0, 0]} 
+                scale={[scale, scale, scale]}
+            >
                 {/* 본체 */}
                 <mesh position={[0, yOffset, 0]}>
                     {Geometry}
                     <meshStandardMaterial color={color} transparent opacity={opacity} />
                 </mesh>
                 
-                {/* 타겟 아이템은 라벨과 마커 표시 */}
+                {/* 타겟 마커 및 라벨 */}
                 {isTarget && (
                     <>
-                        <mesh position={[0, yOffset + 1.5, 0]}>
-                            <coneGeometry args={[0.3, 0.6, 4]} />
-                            <meshStandardMaterial color="#ef4444" />
-                        </mesh>
-                        <Html position={[0, yOffset + 2, 0]} center zIndexRange={[100, 0]}>
-                            <div className="px-2 py-1 bg-red-600/90 text-white text-[10px] font-bold rounded shadow-lg whitespace-nowrap">
-                                {item.label}
+                        {/* 둥둥 떠있는 화살표 */}
+                        <Float speed={2} rotationIntensity={0} floatIntensity={0.5}>
+                            <mesh position={[0, yOffset + 2.5, 0]} rotation={[Math.PI, 0, 0]}>
+                                <coneGeometry args={[0.4, 0.8, 8]} />
+                                <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
+                            </mesh>
+                        </Float>
+                        {/* 텍스트 라벨 */}
+                        <Html position={[0, yOffset + 3.2, 0]} center zIndexRange={[100, 0]}>
+                            <div className="flex flex-col items-center">
+                                <div className="px-2.5 py-1 bg-red-600 text-white text-[11px] font-bold rounded-lg shadow-xl whitespace-nowrap border border-white/20">
+                                    {item.label}
+                                </div>
+                                <div className="w-0.5 h-2 bg-red-600"></div>
                             </div>
                         </Html>
                     </>
@@ -80,76 +117,121 @@ export const EquipmentChatWidget = ({ data }) => {
     };
 
     return (
-        <div className="w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl overflow-hidden shadow-sm transition-all duration-300">
-            {/* 헤더 & 요약 정보 */}
-            <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                        <MapPin size={16} />
+        <div className="w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl overflow-hidden shadow-lg transition-all duration-300">
+            
+            {/* 1. 지도 보기 모드 */}
+            {selectedItem && mapContext ? (
+                <div className="flex flex-col h-full animate-fade-in">
+                    {/* 상단 네비게이션 */}
+                    <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/50">
+                        <button 
+                            onClick={() => setSelectedItem(null)}
+                            className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors bg-white dark:bg-zinc-700 px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600"
+                        >
+                            <ArrowLeft size={12} /> 목록으로
+                        </button>
+                        <div className="text-right">
+                            <p className="text-[10px] text-zinc-400 font-bold">위치 정보</p>
+                            <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                {mapContext.buildingName} {mapContext.floorName}
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400">설비 위치 검색</p>
-                        <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{building} {floor}</p>
-                    </div>
-                </div>
 
-                <div className="space-y-2 mb-3">
-                    <div className="text-xs bg-zinc-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 block mb-1">🔍 검색 결과</span>
-                        <span className="text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                            {foundItems.map(i => i.label).join(', ')}
-                        </span>
-                    </div>
-                </div>
-
-                <button 
-                    onClick={() => setShowMap(!showMap)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all
-                        ${showMap 
-                            ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300' 
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200 dark:shadow-none'}`}
-                >
-                    {showMap ? '지도 접기' : '🗺️ 지도에서 위치 확인하기'}
-                </button>
-            </div>
-
-            {/* 3D 미니맵 영역 */}
-            {showMap && (
-                <div className="h-64 bg-zinc-100 dark:bg-black/80 relative border-t border-zinc-200 dark:border-zinc-800 animate-fade-in-down">
-                    <Canvas camera={{ position: [centerPos.x + 10, 15, centerPos.z + 10], fov: 45 }}>
-                        <ambientLight intensity={0.7} />
-                        <directionalLight position={[10, 20, 5]} intensity={1} />
-                        <OrbitControls 
-                            target={[centerPos.x, 0, centerPos.z]} 
-                            maxPolarAngle={Math.PI / 2.2} 
-                            autoRotate={true}
-                            autoRotateSpeed={1.0}
-                        />
-                        
-                        {/* 바닥 그리드 */}
-                        <gridHelper args={[100, 20, "#cbd5e1", "#475569"]} position={[0, -0.01, 0]} />
-                        
-                        {/* 🌟 [수정됨] 모든 설비 렌더링 (Context 포함) */}
-                        {allItems.map((item, idx) => {
-                            // 검색된 아이템인지 확인
-                            const isFound = foundItems.some(f => f.id === item.id);
-                            return (
+                    {/* 3D 캔버스 영역 */}
+                    <div className="h-64 relative bg-gradient-to-b from-zinc-100 to-zinc-200 dark:from-zinc-900 dark:to-black">
+                        <Canvas camera={{ position: [mapContext.targetItem.x + 8, 12, mapContext.targetItem.z + 8], fov: 40 }}>
+                            <ambientLight intensity={0.6} />
+                            <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow />
+                            <OrbitControls 
+                                target={[mapContext.targetItem.x, 0, mapContext.targetItem.z]} 
+                                maxPolarAngle={Math.PI / 2.1}
+                                autoRotate={true}
+                                autoRotateSpeed={0.5}
+                            />
+                            
+                            <gridHelper args={[100, 20, "#cbd5e1", "#334155"]} position={[0, -0.01, 0]} />
+                            
+                            {/* 🌟 주변 설비 모두 렌더링 */}
+                            {mapContext.allItems.map((item, idx) => (
                                 <GhostObject 
                                     key={item.id || idx} 
                                     item={item} 
-                                    isTarget={isFound} 
+                                    isTarget={item.id === selectedItem.id} 
                                 />
-                            );
-                        })}
-                    </Canvas>
-                    
-                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-[9px] rounded backdrop-blur-sm pointer-events-none flex flex-col gap-1 items-end">
-                        <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-red-500"></span> <span>검색 대상</span>
+                            ))}
+                        </Canvas>
+
+                        {/* 하단 범례 */}
+                        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end pointer-events-none">
+                            <div className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 mb-1">{selectedItem.label}</p>
+                                <p className="text-[10px] text-zinc-500 flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> 선택됨
+                                    <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block ml-2"></span> 주변 설비
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1 opacity-70">
-                            <span className="w-2 h-2 rounded-full bg-zinc-400"></span> <span>주변 설비</span>
+                    </div>
+                </div>
+            ) : (
+                /* 2. 검색 결과 리스트 모드 */
+                <div className="p-4">
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                            <List size={16} />
                         </div>
+                        <div>
+                            <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400">설비 검색 결과</p>
+                            <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                                {foundItems.length}개의 설비가 발견됨
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-700 pr-1">
+                        {foundItems.length > 0 ? (
+                            foundItems.map((item) => {
+                                // 리스트에서도 위치 정보 미리 보여주기 위해 mapData 검색
+                                let locationText = "위치 정보 없음";
+                                for(const b of mapData) {
+                                    for(const f of b.floors) {
+                                        if((f.valves||[]).some(v => v.id === item.id)) {
+                                            locationText = `${b.name} ${f.label}`;
+                                        }
+                                    }
+                                }
+
+                                return (
+                                    <div 
+                                        key={item.id} 
+                                        className="group p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/30 hover:bg-white dark:hover:bg-zinc-800 hover:border-indigo-200 dark:hover:border-indigo-700/50 hover:shadow-md transition-all cursor-pointer flex items-center justify-between"
+                                        onClick={() => setSelectedItem(item)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-700 border border-zinc-100 dark:border-zinc-600 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all">
+                                                <MapPin size={14} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                                    {item.label}
+                                                </p>
+                                                <p className="text-[10px] text-zinc-400 font-medium mt-0.5">
+                                                    {locationText}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                            지도 보기
+                                        </button>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div className="text-center py-8 text-zinc-400 text-xs">
+                                검색 결과가 없습니다.
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
