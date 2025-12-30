@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-30 14:33:03
+﻿// Last Updated: 2025-12-30 14:52:43
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -19,8 +19,11 @@ import WorkDetailView from './views/WorkDetailView';
 import SettingsModal from './components/modals/SettingsModal';
 import GlobalSettingsModal from './components/modals/GlobalSettingsModal';
 import {
-    ScheduleChatWidget, MentalChatWidget, StudyChatWidget, FinanceChatWidget, CustomDashboardChatWidget
+    ScheduleChatWidget, MentalChatWidget, StudyChatWidget, FinanceChatWidget, CustomDashboardChatWidget, EquipmentChatWidget
 } from './components/widgets/ChatWidgets';
+
+import mapData from './data/mapData.json';
+
 
 const { ipcRenderer } = window.require('electron');
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -551,6 +554,28 @@ ${contextText.substring(0, 6000)}
             return;
         }
 
+        if (text.includes("어딨어") || text.includes("위치") || text.match(/[a-zA-Z0-9-]{3,}/)) {
+            // mapData는 import해서 가져와야 합니다.
+            const searchResult = searchEquipmentForChat(text, mapData);
+
+            if (searchResult) {
+                setMessages(prev => [...prev, { id: Date.now(), role: 'user', type: 'text', content: text }]);
+                setInputValue('');
+
+                // 검색 결과 위젯 메시지 추가
+                setTimeout(() => {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + 1,
+                        role: 'ai',
+                        type: 'widget',
+                        widgetType: 'equipment-search', // 3단계에서 추가한 조건과 일치해야 함
+                        data: searchResult
+                    }]);
+                }, 500);
+                return; // AI 호출 안 하고 종료
+            }
+        }
+
         setMessages(prev => [...prev, { id: Date.now(), role: 'user', type: 'text', content: text }]);
         setInputValue('');
         setIsTyping(true);
@@ -917,7 +942,7 @@ ${contextText.substring(0, 6000)}
                                                     ? 'bg-transparent border-none shadow-none p-0'
                                                     : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200'
                                                 }`}>
-                                                {msg.type === 'widget' ? (<>{msg.widgetType === 'schedule' && <ScheduleChatWidget data={msg.data} />}{msg.widgetType === 'finance' && <FinanceChatWidget data={msg.data} />}{msg.widgetType === 'mental' && <MentalChatWidget data={msg.data} />}{msg.widgetType === 'development' && <StudyChatWidget data={msg.data} />}{msg.widgetType === 'custom_dashboard' && <CustomDashboardChatWidget data={msg.data} />}</>) : msg.type === 'quiz' ? (
+                                                {msg.type === 'widget' ? (<>{msg.widgetType === 'schedule' && <ScheduleChatWidget data={msg.data} />}{msg.widgetType === 'finance' && <FinanceChatWidget data={msg.data} />}{msg.widgetType === 'mental' && <MentalChatWidget data={msg.data} />}{msg.widgetType === 'development' && <StudyChatWidget data={msg.data} />}{msg.widgetType === 'custom_dashboard' && <CustomDashboardChatWidget data={msg.data} />}{msg.widgetType === 'equipment-search' && <EquipmentChatWidget data={msg.data} />}</>) : msg.type === 'quiz' ? (
                                                     /* 🌟 [추가됨] 퀴즈 카드 렌더링 */
                                                     <QuizChatCard data={msg.quizData} />
                                                 ) : (
@@ -954,5 +979,55 @@ ${contextText.substring(0, 6000)}
         </div>
     );
 }
+
+const searchEquipmentForChat = (userQuery, mapData) => {
+    // 1. 키워드 추출
+    const match = userQuery.match(/[a-zA-Z0-9-]{3,}/);
+    if (!match) return null;
+    
+    const keyword = match[0];
+    const foundResults = [];
+
+    // 2. 데이터 검색
+    if (Array.isArray(mapData)) {
+        mapData.forEach(building => {
+            if (!building.floors) return;
+            building.floors.forEach(floor => {
+                if (!floor.valves) return;
+                
+                // 검색어와 일치하는 설비 찾기
+                const matches = floor.valves.filter(item => 
+                    item.label && item.label.includes(keyword)
+                );
+
+                if (matches.length > 0) {
+                    // 🌟 [핵심] 검색된 설비가 있는 '층 전체 데이터'를 함께 저장
+                    foundResults.push({
+                        building: building.name || building.id,
+                        floor: floor.id,
+                        foundItems: matches.map(m => ({ ...m, x: Number(m.x), z: Number(m.z), y: Number(m.y) || 0 })),
+                        // 해당 층의 모든 설비를 컨텍스트로 추가 (위치 참조용)
+                        allItems: floor.valves.map(m => ({ ...m, x: Number(m.x), z: Number(m.z), y: Number(m.y) || 0 }))
+                    });
+                }
+            });
+        });
+    }
+
+    if (foundResults.length === 0) return null;
+
+    // 3. 가장 첫 번째 검색 결과(층)를 메인으로 사용
+    const targetResult = foundResults[0];
+
+    return {
+        type: 'equipment-search',
+        keyword: keyword,
+        // 위젯에 전달할 데이터 구성
+        building: targetResult.building,
+        floor: targetResult.floor,
+        foundItems: targetResult.foundItems,
+        allItems: targetResult.allItems // 전체 설비 데이터 전달
+    };
+};
 
 export default App;
