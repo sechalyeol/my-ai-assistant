@@ -1,66 +1,80 @@
-﻿// Last Updated: 2025-12-29 14:52:23
+﻿// Last Updated: 2025-12-30 14:33:03
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Html, ContactShadows, Environment } from '@react-three/drei';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
 import {
     Database, LayoutTemplate, MousePointer2, Edit3,
     Save, X, Search, ChevronRight, ChevronDown,
-    Trash2, Plus, Building, Layers, Check
+    Trash2, Plus, Building, Layers, Check, Eye
 } from 'lucide-react';
 import * as THREE from 'three';
 
-// 🌟 데이터 파일 import
-import mapData from '../../../data/mapData.json';
+// 🌟 [New] 실행 취소/다시 실행을 위한 커스텀 훅
+const useUndoRedo = (initialState) => {
+    const [past, setPast] = useState([]);
+    const [present, setPresent] = useState(initialState);
+    const [future, setFuture] = useState([]);
+
+    const set = (newState) => {
+        setPast((prev) => [...prev, present]);
+        setPresent(newState);
+        setFuture([]);
+    };
+
+    const undo = () => {
+        if (past.length === 0) return;
+        const previous = past[past.length - 1];
+        const newPast = past.slice(0, past.length - 1);
+        setFuture((prev) => [present, ...prev]);
+        setPresent(previous);
+        setPast(newPast);
+    };
+
+    const redo = () => {
+        if (future.length === 0) return;
+        const next = future[0];
+        const newFuture = future.slice(1);
+        setPast((prev) => [...prev, present]);
+        setPresent(next);
+        setFuture(newFuture);
+    };
+
+    return [present, set, undo, redo];
+};
+
 
 // -----------------------------------------------------------------------------
-// 🏢 건물 및 층 구조 정의
+// 🏢 데이터 정의
 // -----------------------------------------------------------------------------
 const BUILDING_STRUCTURE = [
-    {
-        id: 'STEAM',
-        name: '스팀터빈동',
-        floors: ['B1', '1F', '2F', '3F']
-    },
-    {
-        id: 'DH',
-        name: '지역난방설비동',
-        floors: ['1F', '2F']
-    },
-    {
-        id: 'HRSG',
-        name: '배열회수보일러동',
-        floors: ['1F', '2F', 'RF'] // RF: 최상부층
-    }
+    { id: 'STEAM', name: '스팀터빈동', floors: ['B1', '1F', '2F', '3F'] },
+    { id: 'DH', name: '지역난방설비동', floors: ['1F', '2F'] },
+    { id: 'HRSG', name: '배열회수보일러동', floors: ['1F', '2F', 'RF'] }
 ];
 
-// -----------------------------------------------------------------------------
-// 🛠️ 툴바 계층 구조 정의
-// -----------------------------------------------------------------------------
 const TOOL_HIERARCHY = [
     {
         id: 'EQUIPMENT',
         label: '설비',
         icon: Database,
         children: [
-            { label: '밸브', type: 'VALVE_PIN' },
-            { label: '탱크', type: 'TANK' },
-            { label: '제어반', type: 'LCP' },
             {
-                label: '펌프',
+                label: '밸브',
                 hasSubMenu: true,
                 children: [
-                    { label: '수평형', type: 'PUMP_HORIZ' },
-                    { label: '수직형', type: 'PUMP_VERT' }
+                    { label: '전동식 버터플라이 밸브', type: 'VALVE_MOV' },
+                    { label: '공압식 버터플라이 밸브', type: 'VALVE_BUTTERFLY_PNEUMATIC' },
+                    { label: '다이어프램 밸브', type: 'VALVE_MULTI_SPRING' },
+                    { label: '복동식 밸브', type: 'VALVE_DOUBLE_ACTING' },
+                    { label: '유압식 밸브', type: 'VALVE_HYDRAULIC' }
                 ]
             },
-            {
-                label: '열교환기',
-                hasSubMenu: true,
-                children: [
-                    { label: '판형', type: 'HX_PLATE' },
-                    { label: '쉘앤튜브', type: 'HX_SHELL' }
-                ]
-            }
+            { label: '팬', hasSubMenu: true, children: [{ label: '원심형', type: 'FAN_CENTRIFUGAL' }] },
+            { label: '필터', hasSubMenu: true, children: [{ label: '차압 필터', type: 'FILTER_DP' }] },
+            { label: '탱크', hasSubMenu: true, children: [{ label: '원통형 탱크', type: 'TANK_VERTICAL' }, { label: '사각형 탱크', type: 'TANK_SQUARE' }] },
+            { label: '펌프', hasSubMenu: true, children: [{ label: '수평형', type: 'PUMP_HORIZ' }, { label: '수직형', type: 'PUMP_VERT' }] },
+            { label: '전기 설비', hasSubMenu: true, children: [{ label: '제어반', type: 'LCP' }, { label: 'GCB & IPB', type: 'ELEC_GCB_SYSTEM' }] },
+            { label: '열교환기', hasSubMenu: true, children: [{ label: '판형', type: 'HX_PLATE' }, { label: '쉘앤튜브', type: 'HX_SHELL' }, { label: '드레인 쿨러', type: 'HX_DRAIN_COOLER' }] }
         ]
     },
     {
@@ -77,27 +91,99 @@ const TOOL_HIERARCHY = [
     }
 ];
 
+// 🌟 [핵심 수정] 설비 타입으로 카테고리 찾기 (스마트 분류 로직 추가)
+// 메뉴에 없는 구형 타입(VALVE_GATE 등)도 이름으로 유추해서 올바른 카테고리에 매칭시킵니다.
+const getCategoryByType = (type) => {
+    if (!type) return '기타';
+
+    // 1. 메뉴 계층구조에서 정확히 일치하는 것 찾기 (우선순위 1)
+    const equipGroup = TOOL_HIERARCHY.find(g => g.id === 'EQUIPMENT');
+    if (equipGroup) {
+        for (const cat of equipGroup.children) {
+            if (cat.type === type) return cat.label;
+            if (cat.children && cat.children.some(c => c.type === type)) return cat.label;
+        }
+    }
+
+    // 2. 메뉴에 없더라도 이름으로 추측하여 분류 (우선순위 2 - Fallback)
+    // 이게 있어야 '밸브' 체크박스를 켰을 때 VALVE_GATE 같은 구형 설비도 같이 켜집니다.
+    if (type.includes('VALVE')) return '밸브';
+    if (type.includes('PUMP')) return '펌프';
+    if (type.includes('TANK')) return '탱크';
+    if (type.includes('FAN')) return '팬';
+    if (type.includes('FILTER')) return '필터';
+    if (type.includes('HX')) return '열교환기';
+    if (type.includes('ELEC') || type.includes('LCP')) return '전기 설비';
+
+    return '기타';
+};
 // -----------------------------------------------------------------------------
 // 🏭 3D Components & Logic
 // -----------------------------------------------------------------------------
 
-const Label = ({ text, selected, hovered, height }) => {
+// 🌟 [복구됨] Label 컴포넌트 (이게 없어서 에러가 났었습니다)
+const Label = ({ text, selected, hovered, height, forceShow }) => {
     if (!text || text.trim() === "") return null;
-    const isVisible = selected || hovered;
+    const isVisible = selected || hovered || forceShow;
     if (!isVisible) return null;
 
     return (
         <Html position={[0, height + 0.5, 0]} center zIndexRange={[100, 0]}>
             <div className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-all whitespace-nowrap shadow-sm backdrop-blur-sm pointer-events-none select-none
-                ${selected ? 'bg-indigo-600 text-white border-indigo-400 scale-110 z-50' : 'bg-black/70 text-white border-white/20 z-10'}`}>
+                ${selected ? 'bg-indigo-600 text-white border-indigo-400 scale-110 z-50' : 
+                  forceShow ? 'bg-indigo-900/80 text-white border-indigo-500/50 z-20' : 
+                  'bg-black/70 text-white border-white/20 z-10'}`}>
                 {text}
             </div>
         </Html>
     );
 };
 
-// 🌟 InteractiveObject
-const InteractiveObject = ({ Component, itemId, isEditMode, interactionMode, onUpdate, onDragStart, onDragEnd, onClick, ...props }) => {
+// 🌟 라벨 필터 패널
+const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
+    const [isOpen, setIsOpen] = useState(true);
+
+    return (
+        <div className="absolute top-4 left-4 z-20 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg flex flex-col w-48 transition-all animate-fade-in-left">
+            <button 
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center justify-between p-3 w-full text-left border-b border-zinc-100 dark:border-zinc-800"
+            >
+                <div className="flex items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                    <Eye size={14} className="text-indigo-500" />
+                    라벨 보기 설정
+                </div>
+                <ChevronDown size={14} className={`text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {isOpen && (
+                <div className="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                    {categories.map(cat => (
+                        <button
+                            key={cat}
+                            onClick={() => onToggle(cat)}
+                            className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs transition-colors
+                                ${visibleState[cat] 
+                                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium' 
+                                    : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                        >
+                            <div className={`w-3 h-3 rounded border flex items-center justify-center transition-colors
+                                ${visibleState[cat] ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-300 dark:border-zinc-600'}`}>
+                                {visibleState[cat] && <Check size={10} className="text-white" />}
+                            </div>
+                            {cat}
+                        </button>
+                    ))}
+                    {categories.length === 0 && (
+                        <div className="text-center py-2 text-xs text-zinc-400">표시할 설비가 없습니다</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const InteractiveObject = ({ Component, itemId, isEditMode, interactionMode, onUpdate, onDragStart, onDragEnd, onClick, isSelected, showLabel, ...props }) => {
     const [isHovered, setIsHovered] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -154,144 +240,114 @@ const InteractiveObject = ({ Component, itemId, isEditMode, interactionMode, onU
         return () => { document.body.style.cursor = 'auto'; };
     }, [isHovered, isEditMode, interactionMode]);
 
+    const isUnderground = props.position[1] < 0;
+    const groundLevelY = -props.position[1];
+
     return (
-        <Component
-            {...props}
-            isHovered={isHovered}
-            onHoverChange={setIsHovered}
-            onPointerDown={handlePointerDown}
-            onPointerUp={handlePointerUp}
-            onPointerMove={handlePointerMove}
-            onClick={handleClick}
-        />
+        <group>
+            <Component
+                {...props}
+                isSelected={isSelected}
+                isHovered={isHovered}
+                showLabel={showLabel}
+                onHoverChange={setIsHovered}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerMove={handlePointerMove}
+                onClick={handleClick}
+            />
+            {isUnderground && (
+                <group position={props.position}>
+                    <Line
+                        points={[[0, 0, 0], [0, groundLevelY, 0]]}
+                        color={isSelected ? "#4f46e5" : "#ef4444"}
+                        lineWidth={1}
+                        dashed={true}
+                        dashScale={2}
+                        dashSize={0.2}
+                        gapSize={0.1}
+                    />
+                    <group position={[0, groundLevelY + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                        <Circle args={[0.3, 16]}>
+                            <meshBasicMaterial color={isSelected ? "#4f46e5" : "#ef4444"} transparent opacity={0.3} />
+                        </Circle>
+                        <Circle args={[0.35, 16]}>
+                            <meshBasicMaterial color={isSelected ? "#4f46e5" : "#ef4444"} wireframe />
+                        </Circle>
+                    </group>
+                </group>
+            )}
+        </group>
     );
 };
 
 // --- 3D 모델 컴포넌트들 ---
-
-// 🌟 [수정됨] 현장 제어반 (LCP) - 전압/전류계 타입
-const LocalControlPanel = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
+const LocalControlPanel = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
     const width = 1.0;
     const height = 1.8;
     const depth = 0.4;
     const legHeight = 0.2;
-    const cabinetColor = "#94a3b8"; // 약간 더 진한 회색 (산업용 도장 느낌)
+    const cabinetColor = "#94a3b8";
+    const totalHeight = height + legHeight;
 
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
-
-            {/* 1. 메인 캐비닛 바디 */}
             <group position={[0, legHeight + height / 2, 0]}>
                 <mesh castShadow receiveShadow>
                     <boxGeometry args={[width, height, depth]} />
                     <meshStandardMaterial color={cabinetColor} metalness={0.3} roughness={0.4} />
                 </mesh>
-                {/* 문 틈새 */}
                 <mesh position={[0, 0, depth / 2 + 0.005]}>
                     <planeGeometry args={[width - 0.04, height - 0.04]} />
                     <meshStandardMaterial color={cabinetColor} metalness={0.3} roughness={0.4} />
                 </mesh>
             </group>
-
-            {/* 2. 상단 계기판 영역 (R, S, T 미터기) */}
             <group position={[0, legHeight + height * 0.75, depth / 2 + 0.02]}>
-                {/* 미터기 배경 판넬 (약간 튀어나옴) */}
-                <mesh position={[0, 0, -0.01]}>
-                    <boxGeometry args={[0.9, 0.35, 0.02]} />
-                    <meshStandardMaterial color="#cbd5e1" />
-                </mesh>
-
-                {/* 3개의 아날로그 미터 (왼쪽부터 R, S, T) */}
+                <mesh position={[0, 0, -0.01]}><boxGeometry args={[0.9, 0.35, 0.02]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
                 {[-0.3, 0, 0.3].map((x, i) => (
                     <group key={i} position={[x, 0, 0.01]}>
-                        {/* 미터기 테두리 (검은색) */}
-                        <mesh rotation={[Math.PI / 2, 0, 0]}>
-                            <cylinderGeometry args={[0.12, 0.12, 0.02, 32]} />
-                            <meshStandardMaterial color="#1e293b" />
-                        </mesh>
-                        {/* 미터기 유리면 (흰색) */}
-                        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.011, 0]}>
-                            <cylinderGeometry args={[0.1, 0.1, 0.02, 32]} />
-                            <meshBasicMaterial color="#ffffff" />
-                        </mesh>
-                        {/* 미터기 바늘 (빨간색, 랜덤한 각도로 회전) */}
-                        <mesh rotation={[0, 0, -Math.PI / 4 + (i * 0.5)]} position={[0, 0, 0.022]}>
-                            <boxGeometry args={[0.005, 0.08, 0.005]} />
-                            <meshBasicMaterial color="#dc2626" />
-                        </mesh>
-                        {/* 하단 라벨 (R/S/T) 표현 - 작은 사각형 */}
-                        <mesh position={[0, -0.15, 0]}>
-                            <planeGeometry args={[0.05, 0.03]} />
-                            <meshBasicMaterial color="#000000" />
-                        </mesh>
+                        <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.12, 0.12, 0.02, 32]} /><meshStandardMaterial color="#1e293b" /></mesh>
+                        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.011, 0]}><cylinderGeometry args={[0.1, 0.1, 0.02, 32]} /><meshBasicMaterial color="#ffffff" /></mesh>
+                        <mesh rotation={[0, 0, -Math.PI / 4 + (i * 0.5)]} position={[0, 0, 0.022]}><boxGeometry args={[0.005, 0.08, 0.005]} /><meshBasicMaterial color="#dc2626" /></mesh>
+                        <mesh position={[0, -0.15, 0]}><planeGeometry args={[0.05, 0.03]} /><meshBasicMaterial color="#000000" /></mesh>
                     </group>
                 ))}
             </group>
-
-            {/* 3. 중단 조작부 (램프 & 스위치) */}
             <group position={[0, legHeight + height * 0.45, depth / 2 + 0.02]}>
-                {/* 상태 표시등 (ON/OFF/TRIP) - 상단 배치 */}
                 <group position={[0, 0.15, 0]}>
-                    <mesh position={[-0.2, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.6} /></mesh> {/* Stop (Red) */}
-                    <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.6} /></mesh>   {/* Run (Green) */}
-                    <mesh position={[0.2, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#eab308" emissive="#eab308" emissiveIntensity={0.6} /></mesh>   {/* Fault (Yellow) */}
+                    <mesh position={[-0.2, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.6} /></mesh>
+                    <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.6} /></mesh>
+                    <mesh position={[0.2, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.02]} /><meshStandardMaterial color="#eab308" emissive="#eab308" emissiveIntensity={0.6} /></mesh>
                 </group>
-
-                {/* 조작 버튼 및 셀렉터 스위치 - 하단 배치 */}
                 <group position={[0, -0.15, 0]}>
-                    {/* 기동 버튼 (녹색, 튀어나옴) */}
-                    <mesh position={[-0.25, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                        <cylinderGeometry args={[0.035, 0.035, 0.04]} />
-                        <meshStandardMaterial color="#15803d" />
-                    </mesh>
-                    {/* 정지 버튼 (적색, 튀어나옴) */}
-                    <mesh position={[-0.1, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                        <cylinderGeometry args={[0.035, 0.035, 0.04]} />
-                        <meshStandardMaterial color="#b91c1c" />
-                    </mesh>
-
-                    {/* 전압/전류 전환 셀렉터 스위치 (Cam Switch) */}
+                    <mesh position={[-0.25, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.035, 0.035, 0.04]} /><meshStandardMaterial color="#15803d" /></mesh>
+                    <mesh position={[-0.1, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.035, 0.035, 0.04]} /><meshStandardMaterial color="#b91c1c" /></mesh>
                     <group position={[0.2, 0, 0]}>
-                        <mesh rotation={[Math.PI / 2, 0, 0]}>
-                            <cylinderGeometry args={[0.05, 0.05, 0.02]} />
-                            <meshStandardMaterial color="#334155" />
-                        </mesh>
-                        {/* 스위치 손잡이 */}
-                        <mesh position={[0, 0, 0.02]} rotation={[0, 0, Math.PI / 4]}>
-                            <boxGeometry args={[0.02, 0.08, 0.02]} />
-                            <meshStandardMaterial color="#0f172a" />
-                        </mesh>
+                        <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.05, 0.05, 0.02]} /><meshStandardMaterial color="#334155" /></mesh>
+                        <mesh position={[0, 0, 0.02]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.02, 0.08, 0.02]} /><meshStandardMaterial color="#0f172a" /></mesh>
                     </group>
                 </group>
             </group>
-
-            {/* 4. 하단 명판 (Equipment Nameplate) */}
             <group position={[0, legHeight + height * 0.2, depth / 2 + 0.01]}>
-                <mesh>
-                    <planeGeometry args={[0.6, 0.15]} />
-                    <meshStandardMaterial color="#f1f5f9" />
-                </mesh>
-                {/* 글씨 느낌의 줄무늬 */}
-                <mesh position={[0, 0, 0.001]}>
-                    <planeGeometry args={[0.4, 0.02]} />
-                    <meshBasicMaterial color="#000000" />
-                </mesh>
+                <mesh><planeGeometry args={[0.6, 0.15]} /><meshStandardMaterial color="#f1f5f9" /></mesh>
+                <mesh position={[0, 0, 0.001]}><planeGeometry args={[0.4, 0.02]} /><meshBasicMaterial color="#000000" /></mesh>
             </group>
-
-            {/* 5. 다리 (앵글 베이스) */}
             <group position={[0, legHeight / 2, 0]}>
                 <mesh position={[width / 2 - 0.05, 0, depth / 2 - 0.05]}><boxGeometry args={[0.1, legHeight, 0.1]} /><meshStandardMaterial color="#1e293b" /></mesh>
                 <mesh position={[-width / 2 + 0.05, 0, depth / 2 - 0.05]}><boxGeometry args={[0.1, legHeight, 0.1]} /><meshStandardMaterial color="#1e293b" /></mesh>
                 <mesh position={[width / 2 - 0.05, 0, -depth / 2 + 0.05]}><boxGeometry args={[0.1, legHeight, 0.1]} /><meshStandardMaterial color="#1e293b" /></mesh>
                 <mesh position={[-width / 2 + 0.05, 0, -depth / 2 + 0.05]}><boxGeometry args={[0.1, legHeight, 0.1]} /><meshStandardMaterial color="#1e293b" /></mesh>
             </group>
-
-            <Label text={label} selected={isSelected} hovered={isHovered} height={height + legHeight + 0.2} />
+            <mesh position={[0, totalHeight / 2, 0]}>
+                <boxGeometry args={[width, totalHeight, depth]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={totalHeight + 0.2} />
         </group>
     );
 };
 
-const SteelGrating = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
+const SteelGrating = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
     const texture = useMemo(() => {
         const c = document.createElement('canvas'); c.width = 64; c.height = 64;
         const ctx = c.getContext('2d'); ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0, 0, 64, 64);
@@ -300,43 +356,200 @@ const SteelGrating = ({ position, rotation, label, onClick, isSelected, isHovere
         const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); return t;
     }, []);
     useEffect(() => { texture.repeat.set(scale * 4, scale * 4); }, [scale, texture]);
+
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, 1, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
             <mesh position={[0, 0.05, 0]} castShadow receiveShadow><boxGeometry args={[4, 0.1, 4]} /><meshStandardMaterial color="#334155" /></mesh>
             <mesh position={[0, 0.11, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[3.8, 3.8]} /><meshStandardMaterial map={texture} transparent={true} alphaTest={0.1} side={THREE.DoubleSide} metalness={0.8} roughness={0.2} /></mesh>
-            <mesh position={[0, 0.1, 0]}><boxGeometry args={[4, 0.5, 4]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={0.5} />
+            {/* 히트박스 */}
+            <mesh position={[0, 0.1, 0]}><boxGeometry args={[4, 0.5, 4]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+
+            {/* 🌟 [삭제됨] 구조물이라 명칭 라벨 불필요 */}
+            {/* <Label text={label} ... /> */}
         </group>
     );
 };
 
-const ValvePin = ({ position, rotation, label, status, onClick, isSelected, isHovered, onHoverChange }) => {
-    const color = status === 'WARNING' ? '#ef4444' : (isSelected ? '#4f46e5' : '#10b981');
-    const groupRef = useRef(); const ringRef = useRef();
-    useFrame((state) => {
-        if (!groupRef.current) return;
-        groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.1;
-        if (ringRef.current) {
-            const scale = (isSelected || isHovered) ? 1 + Math.sin(state.clock.elapsedTime * 5) * 0.2 : 1;
-            ringRef.current.scale.set(scale, scale, 1);
-            ringRef.current.material.opacity = (isSelected || isHovered) ? 0.5 : 0.2;
-        }
-    });
+const PneumaticButterflyValve = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const bodyColor = "#94a3b8";
+    const discColor = "#334155";
+    const actuatorColor = "#f59e0b";
+    const capColor = "#1e293b";
+    const solenoidColor = "#0f172a";
+
+    const renderBolts = (count, radius) => Array.from({ length: count }).map((_, i) => (
+        <mesh key={i} position={[Math.cos(i / count * Math.PI * 2) * radius, 0, Math.sin(i / count * Math.PI * 2) * radius]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.015, 0.015, 0.12]} /><meshStandardMaterial color="#333" />
+        </mesh>
+    ));
+
     return (
-        <group ref={groupRef} position={position} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }}>
-            <group position={[0, 2, 0]}>
-                <mesh castShadow><sphereGeometry args={[0.8, 32, 32]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={isSelected ? 0.8 : 0.2} /></mesh>
-                <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.9, 1.1, 32]} /><meshBasicMaterial color="white" transparent opacity={0.2} side={THREE.DoubleSide} /></mesh>
-                <mesh position={[0, -1, 0]}><cylinderGeometry args={[0.05, 0.05, 2]} /><meshStandardMaterial color={color} /></mesh>
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+            <group rotation={[0, 0, Math.PI / 2]}>
+                <mesh castShadow receiveShadow><cylinderGeometry args={[0.25, 0.25, 0.1, 32]} /><meshStandardMaterial color={bodyColor} /></mesh>
+                <mesh rotation={[0, Math.PI / 6, 0]}><cylinderGeometry args={[0.23, 0.23, 0.02, 32]} /><meshStandardMaterial color={discColor} /></mesh>
+                {renderBolts(4, 0.2)}
             </group>
-            <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.3, 0.6, 32]} /><meshBasicMaterial color={color} transparent opacity={0.6} /></mesh>
-            <mesh position={[0, 1.5, 0]}><cylinderGeometry args={[1, 1, 3.5]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={3.2} />
+            <mesh position={[0, 0.3, 0]}><cylinderGeometry args={[0.04, 0.04, 0.6]} /><meshStandardMaterial color={bodyColor} /></mesh>
+            <mesh position={[0, 0.2, 0]}><boxGeometry args={[0.15, 0.1, 0.15]} /><meshStandardMaterial color={bodyColor} /></mesh>
+            <group position={[0, 0.65, 0]}>
+                <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.18, 0.18, 0.8, 32]} /><meshStandardMaterial color={actuatorColor} metalness={0.3} roughness={0.4} /></mesh>
+                <mesh position={[0.42, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.2, 0.2, 0.05, 32]} /><meshStandardMaterial color={capColor} /></mesh>
+                <mesh position={[-0.42, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.2, 0.2, 0.05, 32]} /><meshStandardMaterial color={capColor} /></mesh>
+                <group position={[0, 0.2, 0]}>
+                    <mesh><boxGeometry args={[0.1, 0.05, 0.1]} /><meshStandardMaterial color="#111" /></mesh>
+                    <mesh position={[0, 0.05, 0]}><cylinderGeometry args={[0.04, 0.04, 0.05]} /><meshStandardMaterial color="#ef4444" /></mesh>
+                    <mesh position={[0, 0.05, 0]} rotation={[0, Math.PI / 4, 0]}><boxGeometry args={[0.01, 0.06, 0.08]} /><meshStandardMaterial color="#yellow" /></mesh>
+                </group>
+                <group position={[0, -0.1, 0.2]}>
+                    <mesh><boxGeometry args={[0.3, 0.15, 0.1]} /><meshStandardMaterial color={solenoidColor} /></mesh>
+                    <mesh position={[0.2, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.06, 0.06, 0.15]} /><meshStandardMaterial color="#111" /></mesh>
+                    <mesh position={[-0.05, -0.1, 0]}><cylinderGeometry args={[0.02, 0.02, 0.1]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+                    <mesh position={[0.05, -0.1, 0]}><cylinderGeometry args={[0.02, 0.02, 0.1]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+                </group>
+            </group>
+            <mesh position={[0, 0.5, 0]}><boxGeometry args={[1.0, 1.2, 0.6]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={1.4} />
         </group>
     );
 };
 
-const VerticalLadder = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
+// 🌟 [Cleaned] ValvePin (불필요한 수동/버터플라이 로직 제거)
+const ValvePin = ({ position, rotation, type, label, status, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
+    // 타입 판별
+    const isMOV = type === 'VALVE_MOV';
+    const isMultiSpring = type === 'VALVE_MULTI_SPRING';
+    const isDoubleActing = type === 'VALVE_DOUBLE_ACTING';
+    const isHydraulic = type === 'VALVE_HYDRAULIC';
+
+    // 색상 정의
+    const castIron = "#334155";
+    const flangeColor = "#475569";
+    const boltColor = "#cbd5e1";
+    const stemColor = "#e2e8f0";
+    const yokeColor = "#1e293b";
+    const tubeColor = "#d97706";
+
+    const diaphragmGreen = "#059669";
+    const cylinderBlack = "#0f172a";
+    const hydraulicRed = "#dc2626";
+    const wheelBlue = "#1d4ed8";
+
+    // 헬퍼: 육각 볼트
+    const renderBolts = (count, radius, yPos, axis = 'y') => {
+        return Array.from({ length: count }).map((_, i) => {
+            const angle = (i / count) * Math.PI * 2;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            let pos = [x, yPos, z];
+            let rot = [0, 0, 0];
+            if (axis === 'x') { pos = [yPos, x, z]; rot = [0, 0, Math.PI / 2]; }
+            else if (axis === 'z') { pos = [x, z, yPos]; rot = [Math.PI / 2, 0, 0]; }
+            return (
+                <mesh key={i} position={pos} rotation={rot}>
+                    <cylinderGeometry args={[0.015, 0.015, 0.03, 6]} />
+                    <meshStandardMaterial color={boltColor} />
+                </mesh>
+            );
+        });
+    };
+
+    return (
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+
+            {/* PART 1: VALVE BODY (Globe Type Body for all included types) */}
+            <group position={[0, 0.5, 0]}>
+                <mesh castShadow><sphereGeometry args={[0.3, 32, 32]} /><meshStandardMaterial color={castIron} /></mesh>
+                <mesh rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.22, 0.22, 0.9]} /><meshStandardMaterial color={castIron} /></mesh>
+                <mesh position={[0, 0.28, 0]}><cylinderGeometry args={[0.2, 0.25, 0.2]} /><meshStandardMaterial color={castIron} /></mesh>
+                <mesh position={[0, 0.38, 0]}><cylinderGeometry args={[0.26, 0.26, 0.05]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                <group position={[0, 0.4, 0]}>{renderBolts(8, 0.22, 0, 'y')}</group>
+                <group position={[0.45, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                    <mesh><cylinderGeometry args={[0.38, 0.38, 0.08]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                    <group position={[0, 0.045, 0]}>{renderBolts(8, 0.3, 0, 'y')}</group>
+                </group>
+                <group position={[-0.45, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                    <mesh><cylinderGeometry args={[0.38, 0.38, 0.08]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                    <group position={[0, 0.045, 0]}>{renderBolts(8, 0.3, 0, 'y')}</group>
+                </group>
+            </group>
+
+            {/* PART 2: ACTUATOR */}
+            {/* A. 컨트롤 밸브 (MultiSpring / DoubleActing) */}
+            {(isMultiSpring || isDoubleActing) && (
+                <group position={[0, 0.9, 0]}>
+                    <group position={[0, -0.2, 0]}>
+                        <mesh position={[-0.07, 0.25, 0]}><boxGeometry args={[0.03, 0.5, 0.04]} /><meshStandardMaterial color={yokeColor} /></mesh>
+                        <mesh position={[0.07, 0.25, 0]}><boxGeometry args={[0.03, 0.5, 0.04]} /><meshStandardMaterial color={yokeColor} /></mesh>
+                        <mesh position={[0, 0, 0]}><cylinderGeometry args={[0.1, 0.1, 0.05, 6]} /><meshStandardMaterial color="#eab308" /></mesh>
+                        <mesh position={[0, 0.25, 0]}><cylinderGeometry args={[0.025, 0.025, 0.6]} /><meshStandardMaterial color={stemColor} /></mesh>
+                        <mesh position={[0, 0.25, 0.03]}><boxGeometry args={[0.1, 0.03, 0.01]} /><meshStandardMaterial color="#ef4444" /></mesh>
+                    </group>
+                    <group position={[0.22, -0.1, 0]}>
+                        <mesh castShadow><boxGeometry args={[0.15, 0.22, 0.12]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+                        <mesh position={[0, 0.05, 0.06]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.03, 0.03, 0.02]} /><meshStandardMaterial color="#fff" /></mesh>
+                        <mesh position={[-0.1, 0.1, 0]} rotation={[0, 0, -Math.PI / 4]}><cylinderGeometry args={[0.008, 0.008, 0.25]} /><meshStandardMaterial color={tubeColor} /></mesh>
+                    </group>
+                    {isMultiSpring && (
+                        <group position={[0, 0.4, 0]}>
+                            <mesh position={[0, 0, 0]}><cylinderGeometry args={[0.42, 0.15, 0.2]} /><meshStandardMaterial color={diaphragmGreen} /></mesh>
+                            <mesh position={[0, 0.2, 0]} castShadow><cylinderGeometry args={[0.42, 0.42, 0.2]} /><meshStandardMaterial color={diaphragmGreen} /></mesh>
+                            <mesh position={[0, 0.35, 0]}><sphereGeometry args={[0.42, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={diaphragmGreen} /></mesh>
+                            <group position={[0, 0.1, 0]}>{renderBolts(10, 0.39, 0, 'y')}</group>
+                            <group position={[0, 0.6, 0]}>
+                                <mesh><cylinderGeometry args={[0.03, 0.03, 0.2]} /><meshStandardMaterial color={stemColor} /></mesh>
+                                <mesh position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.12, 0.02, 8, 16]} /><meshStandardMaterial color={wheelBlue} /></mesh>
+                            </group>
+                        </group>
+                    )}
+                    {isDoubleActing && (
+                        <group position={[0, 0.5, 0]}>
+                            <mesh castShadow><cylinderGeometry args={[0.28, 0.28, 0.6, 32]} /><meshStandardMaterial color={cylinderBlack} /></mesh>
+                            <mesh position={[0, 0.31, 0]}><cylinderGeometry args={[0.3, 0.3, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+                            <mesh position={[0, -0.31, 0]}><cylinderGeometry args={[0.3, 0.3, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+                            <group position={[0, 0, 0]}>{renderBolts(4, 0.25, 0, 'y')}</group>
+                        </group>
+                    )}
+                </group>
+            )}
+
+            {/* B. MOV (Limitorque) */}
+            {isMOV && (
+                <group position={[0, 0.95, 0]}>
+                    <mesh position={[0, 0.1, 0]} castShadow><boxGeometry args={[0.4, 0.3, 0.3]} /><meshStandardMaterial color={yokeColor} /></mesh>
+                    <group position={[0.3, 0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
+                        <mesh><cylinderGeometry args={[0.14, 0.14, 0.4]} /><meshStandardMaterial color="#475569" /></mesh>
+                        {[...Array(5)].map((_, i) => <mesh key={i} position={[0, -0.15 + i * 0.07, 0]}><cylinderGeometry args={[0.15, 0.15, 0.02]} /><meshStandardMaterial color="#475569" /></mesh>)}
+                    </group>
+                    <group position={[0, 0.1, 0.25]} rotation={[Math.PI / 2, 0, 0]}>
+                        <mesh><torusGeometry args={[0.18, 0.02, 8, 16]} /><meshStandardMaterial color="#b91c1c" /></mesh>
+                    </group>
+                    <mesh position={[0, 0.26, 0]}><cylinderGeometry args={[0.1, 0.1, 0.02]} /><meshStandardMaterial color="#fcd34d" /></mesh>
+                </group>
+            )}
+
+            {/* C. 유압식 */}
+            {isHydraulic && (
+                <group position={[0, 0.9, 0]}>
+                    <mesh position={[0, -0.2, 0]}><cylinderGeometry args={[0.12, 0.15, 0.4]} /><meshStandardMaterial color={yokeColor} /></mesh>
+                    <mesh position={[0, 0.5, 0]} castShadow><cylinderGeometry args={[0.16, 0.16, 1.0]} /><meshStandardMaterial color={hydraulicRed} /></mesh>
+                    <mesh position={[0, 1.0, 0]}><cylinderGeometry args={[0.18, 0.18, 0.05]} /><meshStandardMaterial color="#111" /></mesh>
+                    <group position={[0.25, 0.3, 0]}>
+                        <mesh><cylinderGeometry args={[0.12, 0.12, 0.6]} /><meshStandardMaterial color="#333" /></mesh>
+                        <mesh position={[0, 0.3, 0]}><sphereGeometry args={[0.12]} /><meshStandardMaterial color="#333" /></mesh>
+                        <mesh position={[-0.15, -0.2, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.02, 0.02, 0.2]} /><meshStandardMaterial color="#94a3b8" /></mesh>
+                    </group>
+                </group>
+            )}
+
+            <mesh position={[0, 0.8, 0]}><boxGeometry args={[1.0, 2.0, 1.0]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={2.5} />
+        </group>
+    );
+};
+
+// 3. 사다리 (라벨 제거)
+const VerticalLadder = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
     const HEIGHT = 5; const WIDTH = 0.8; const STEPS = 15; const RUNG_SPACING = HEIGHT / STEPS;
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
@@ -350,13 +563,15 @@ const VerticalLadder = ({ position, rotation, label, onClick, isSelected, isHove
             <group position={[0, HEIGHT - 1.5, 0.5]}>
                 {[0, 0.8, 1.6].map((y, i) => (<group key={i} position={[0, y, 0]}><mesh rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.5, 0.03, 8, 24, Math.PI]} /><meshStandardMaterial color="#f59e0b" /></mesh><mesh position={[-0.5, 0.4, 0]}><cylinderGeometry args={[0.02, 0.02, 0.8]} /><meshStandardMaterial color="#f59e0b" /></mesh><mesh position={[0.5, 0.4, 0]}><cylinderGeometry args={[0.02, 0.02, 0.8]} /><meshStandardMaterial color="#f59e0b" /></mesh><mesh position={[0, 0.4, 0.5]}><cylinderGeometry args={[0.02, 0.02, 0.8]} /><meshStandardMaterial color="#f59e0b" /></mesh></group>))}
             </group>
-            <mesh position={[0, HEIGHT / 2, 0.2]}><boxGeometry args={[WIDTH + 0.6, HEIGHT, 1]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={HEIGHT * scale + 0.5} />
+            <mesh position={[0, HEIGHT / 2, 0.2]}><boxGeometry args={[WIDTH + 0.6, HEIGHT, 1]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+
+            {/* 🌟 [삭제됨] 라벨 제거 */}
         </group>
     );
 };
 
-const Stairs = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange }) => {
+// 3. 계단 (오류 발생했던 부분 -> 라벨 제거 완료)
+const Stairs = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const STEPS = 12; const WIDTH = 3; const STEP_HEIGHT = 0.5; const STEP_DEPTH = 0.8; const LANDING_STEP = 6;
     const steps = useMemo(() => {
         const items = []; let currentY = 0; let currentZ = 0;
@@ -371,18 +586,19 @@ const Stairs = ({ position, rotation, label, onClick, isSelected, isHovered, onH
         return items;
     }, []);
     return (
-        <group position={position} rotation={[0, rotation || 0, 0]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }}>
+        <group position={position} rotation={[0, rotation || 0, 0]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
             <group position={[0, STEP_HEIGHT / 2, 0]}>{steps}</group>
-            <mesh position={[0, STEPS * STEP_HEIGHT / 2, STEPS * STEP_DEPTH / 2]} rotation={[0.5, 0, 0]}><boxGeometry args={[WIDTH + 1, STEPS * STEP_HEIGHT * 2, STEPS * STEP_DEPTH + 2]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={STEPS * STEP_HEIGHT + 2} />
+            <mesh position={[0, STEPS * STEP_HEIGHT / 2, STEPS * STEP_DEPTH / 2]} rotation={[0.5, 0, 0]}><boxGeometry args={[WIDTH + 1, STEPS * STEP_HEIGHT * 2, STEPS * STEP_DEPTH + 2]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            {/* 🌟 [삭제됨] Label 컴포넌트 삭제로 오류 해결 */}
         </group>
     );
 };
 
-const SecurityDoor = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+// 4. 출입문 (라벨 제거 완료)
+const SecurityDoor = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const WIDTH = 4.0; const HEIGHT = 6.0; const THICKNESS = 0.25; const FRAME_THICK = 0.4;
     return (
-        <group position={position} rotation={[0, rotation || 0, 0]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }}>
+        <group position={position} rotation={[0, rotation || 0, 0]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
             <group position={[0, HEIGHT / 2, 0]}>
                 <mesh position={[0, HEIGHT / 2, 0]} castShadow><boxGeometry args={[WIDTH + FRAME_THICK * 2, FRAME_THICK, 0.5]} /><meshStandardMaterial color="#334155" /></mesh>
                 <mesh position={[-(WIDTH + FRAME_THICK) / 2, 0, 0]} castShadow><boxGeometry args={[FRAME_THICK, HEIGHT, 0.5]} /><meshStandardMaterial color="#334155" /></mesh>
@@ -395,13 +611,14 @@ const SecurityDoor = ({ position, rotation, label, onClick, isSelected, isHovere
             </group>
             <group position={[WIDTH / 2 + 1.0, 3.5, 0.1]}><mesh><boxGeometry args={[0.5, 0.8, 0.1]} /><meshStandardMaterial color="#1e293b" /></mesh><mesh position={[0, 0.25, 0.06]}><circleGeometry args={[0.08, 16]} /><meshBasicMaterial color="#3b82f6" toneMapped={false} /></mesh></group>
             <group position={[0, HEIGHT + 0.8, 0.1]}><mesh><boxGeometry args={[2.0, 0.6, 0.1]} /><meshStandardMaterial color="#14532d" /></mesh><mesh position={[0, 0.1, 0.06]}><planeGeometry args={[1.7, 0.35]} /><meshBasicMaterial color="#22c55e" toneMapped={false} /></mesh></group>
-            <mesh position={[0, HEIGHT / 2, 0]}><boxGeometry args={[WIDTH + 2, HEIGHT, 2]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={HEIGHT + 2.0} />
+            <mesh position={[0, HEIGHT / 2, 0]}><boxGeometry args={[WIDTH + 2, HEIGHT, 2]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            {/* Label 컴포넌트 삭제됨 */}
         </group>
     );
 };
 
-const FireShutter = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+// 5. 방화셔터 (라벨 제거 완료)
+const FireShutter = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const OPEN_W = 12.0; const OPEN_H = 10.0; const BOX_H = 1.5; const RAIL_W = 0.8; const DEPTH = 1.0;
     const shutterTexture = useMemo(() => {
         const c = document.createElement('canvas'); c.width = 128; c.height = 128; const ctx = c.getContext('2d');
@@ -416,45 +633,72 @@ const FireShutter = ({ position, rotation, label, onClick, isSelected, isHovered
             <group><mesh position={[-(OPEN_W + RAIL_W) / 2, OPEN_H / 2, 0]} castShadow><boxGeometry args={[RAIL_W, OPEN_H, DEPTH]} /><meshStandardMaterial color="#475569" metalness={0.6} roughness={0.5} /></mesh><mesh position={[(OPEN_W + RAIL_W) / 2, OPEN_H / 2, 0]} castShadow><boxGeometry args={[RAIL_W, OPEN_H, DEPTH]} /><meshStandardMaterial color="#475569" metalness={0.6} roughness={0.5} /></mesh></group>
             <group position={[0, OPEN_H / 2, -0.1]}><mesh receiveShadow castShadow><planeGeometry args={[OPEN_W, OPEN_H]} /><meshStandardMaterial map={shutterTexture} metalness={0.8} roughness={0.4} side={THREE.DoubleSide} /></mesh><mesh position={[0, -OPEN_H / 2 + 0.2, 0.1]} castShadow><boxGeometry args={[OPEN_W, 0.4, DEPTH / 2]} /><meshStandardMaterial color="#1e293b" metalness={0.9} /></mesh></group>
             <group position={[OPEN_W / 2 + RAIL_W + 0.5, 1.5, 0]}><mesh castShadow><boxGeometry args={[0.6, 1.0, 0.3]} /><meshStandardMaterial color="#ca8a04" /></mesh><mesh position={[0, 0.2, 0.16]}><boxGeometry args={[0.2, 0.2, 0.1]} /><meshStandardMaterial color="#dc2626" /></mesh><mesh position={[0, -0.2, 0.16]}><boxGeometry args={[0.2, 0.2, 0.1]} /><meshStandardMaterial color="#16a34a" /></mesh></group>
-            <mesh position={[0, totalHeight / 2, 0]}><boxGeometry args={[OPEN_W + 2, totalHeight, DEPTH + 1]} /><meshBasicMaterial transparent opacity={0} /></mesh>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={totalHeight + 1.0} />
+            <mesh position={[0, totalHeight / 2, 0]}><boxGeometry args={[OPEN_W + 2, totalHeight, DEPTH + 1]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            {/* Label 컴포넌트 삭제됨 */}
         </group>
     );
 };
 
-const IndustrialPump = ({ position, rotation, type, scale = 1, label, status, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+const IndustrialPump = ({ position, rotation, type, scale = 1, label, status, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const isVertical = type === 'PUMP_VERTICAL' || type === 'PUMP_VERT';
-    const color = status === 'WARNING' ? '#ef4444' : (isSelected ? '#4f46e5' : '#3b82f6');
-    const metalColor = "#64748b"; const darkMetal = "#1e293b";
+    const pumpColor = status === 'WARNING' ? '#ef4444' : (isSelected ? '#4f46e5' : '#3b82f6');
+    const motorColor = "#64748b";
+    const baseColor = "#1e293b";
+    const shaftColor = "#cbd5e1";
+    const guardColor = "#f59e0b";
+
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
             {isVertical ? (
                 <group position={[0, 2, 0]}>
-                    <mesh position={[0, 1.5, 0]} castShadow><cylinderGeometry args={[1, 1, 2.5, 32]} /><meshStandardMaterial color={metalColor} roughness={0.5} /></mesh>
-                    <mesh position={[0, 1.5, 0]}><cylinderGeometry args={[1.1, 1.1, 2, 8]} /><meshStandardMaterial color={metalColor} wireframe /></mesh>
+                    <mesh position={[0, 1.5, 0]} castShadow><cylinderGeometry args={[1, 1, 2.5, 32]} /><meshStandardMaterial color={motorColor} roughness={0.5} /></mesh>
+                    <mesh position={[0, 1.5, 0]}><cylinderGeometry args={[1.1, 1.1, 2, 8]} /><meshStandardMaterial color={motorColor} wireframe /></mesh>
                     <mesh position={[0, -0.2, 0]}><cylinderGeometry args={[0.8, 0.6, 1]} /><meshStandardMaterial color="#f97316" /></mesh>
-                    <mesh position={[0, -1.2, 0]}><cylinderGeometry args={[1.2, 1.2, 1.2]} /><meshStandardMaterial color={color} /></mesh>
-                    <mesh position={[0, -1.5, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.4, 0.4, 4]} /><meshStandardMaterial color={darkMetal} /></mesh>
+                    <mesh position={[0, -1.2, 0]}><cylinderGeometry args={[1.2, 1.2, 1.2]} /><meshStandardMaterial color={pumpColor} /></mesh>
+                    <mesh position={[0, -1.5, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.4, 0.4, 4]} /><meshStandardMaterial color="#1e293b" /></mesh>
                     <mesh position={[2, -1.5, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.6, 0.6, 0.2]} /><meshStandardMaterial color="#94a3b8" /></mesh>
                     <mesh position={[-2, -1.5, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.6, 0.6, 0.2]} /><meshStandardMaterial color="#94a3b8" /></mesh>
                     <mesh position={[0, -2.5, 0]}><boxGeometry args={[1.5, 1, 1.5]} /><meshStandardMaterial color="#334155" /></mesh>
-                    <mesh position={[0, 0, 0]}><boxGeometry args={[4.5, 6, 2]} /><meshBasicMaterial transparent opacity={0} /></mesh>
+                    <mesh position={[0, 0, 0]}><boxGeometry args={[4.5, 6, 2]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
                 </group>
             ) : (
-                <group position={[0, 0.8, 0]}>
-                    <mesh position={[0, -0.6, 0]} receiveShadow><boxGeometry args={[5.5, 0.3, 2]} /><meshStandardMaterial color="#1e293b" /></mesh>
-                    <group position={[-1.5, 0.5, 0]}><mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[1, 1, 2.5, 32]} /><meshStandardMaterial color={metalColor} /></mesh><mesh position={[-1.4, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[1.05, 1.05, 0.5]} /><meshStandardMaterial color="#334155" /></mesh><mesh position={[0.5, 1, 0.5]}><boxGeometry args={[0.6, 0.6, 0.6]} /><meshStandardMaterial color={metalColor} /></mesh></group>
-                    <mesh position={[0.2, 0.5, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.6, 0.6, 1.2, 16, 1, true, 0, Math.PI]} /><meshStandardMaterial color="#f59e0b" side={THREE.DoubleSide} /></mesh>
-                    <group position={[1.8, 0.5, 0]}><mesh rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[1.2, 1.2, 0.8, 32]} /><meshStandardMaterial color={color} /></mesh><mesh position={[0, 1.2, 0]}><cylinderGeometry args={[0.4, 0.5, 1.5]} /><meshStandardMaterial color={color} /></mesh><mesh position={[0, 2, 0]}><cylinderGeometry args={[0.7, 0.7, 0.1]} /><meshStandardMaterial color="#94a3b8" /></mesh><mesh position={[0.8, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.5, 0.6, 1]} /><meshStandardMaterial color={color} /></mesh><mesh position={[1.4, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.8, 0.8, 0.1]} /><meshStandardMaterial color="#94a3b8" /></mesh></group>
-                    <mesh position={[0, 0.5, 0]}><boxGeometry args={[6, 3, 3]} /><meshBasicMaterial transparent opacity={0} /></mesh>
+                <group position={[0, 0.6, 0]}>
+                    <group position={[0.5, -0.7, 0]}>
+                        <mesh receiveShadow castShadow><boxGeometry args={[7.5, 0.2, 2.8]} /><meshStandardMaterial color={baseColor} /></mesh>
+                        <mesh position={[0, -0.15, 0]}><boxGeometry args={[7.7, 0.1, 3.0]} /><meshStandardMaterial color="#94a3b8" /></mesh>
+                    </group>
+                    <group position={[-2.0, 0.6, 0]}>
+                        <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[1.0, 1.0, 2.5, 32]} /><meshStandardMaterial color={motorColor} /></mesh>
+                        {Array.from({ length: 8 }).map((_, i) => (<mesh key={i} position={[-1.0 + i * 0.3, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[1.05, 1.05, 0.15, 32]} /><meshStandardMaterial color={motorColor} /></mesh>))}
+                        <mesh position={[0.2, 1.0, 0.5]} castShadow><boxGeometry args={[0.5, 0.4, 0.5]} /><meshStandardMaterial color={motorColor} /></mesh>
+                        <mesh position={[0, -1.0, 0]}><boxGeometry args={[1.5, 0.2, 1.6]} /><meshStandardMaterial color={motorColor} /></mesh>
+                    </group>
+                    <group position={[-0.1, 0.6, 0]}>
+                        <mesh rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.12, 0.12, 1.5]} /><meshStandardMaterial color={shaftColor} metalness={0.8} roughness={0.2} /></mesh>
+                        <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.5, 0.5, 0.9, 32, 1, true, 0, Math.PI]} /><meshStandardMaterial color={guardColor} side={THREE.DoubleSide} /></mesh>
+                    </group>
+                    <group position={[2.0, 0.6, 0]}>
+                        <group>
+                            <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[1.2, 1.2, 0.8, 32, 1, false, 0, Math.PI]} /><meshStandardMaterial color={pumpColor} /></mesh>
+                            <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[1.2, 1.2, 0.8, 32, 1, false, Math.PI, Math.PI]} /><meshStandardMaterial color={pumpColor} /></mesh>
+                            <mesh position={[0, 0, 0]}><boxGeometry args={[1.0, 0.05, 2.6]} /><meshStandardMaterial color={pumpColor} /></mesh>
+                            {[0.4, -0.4].map(x => [-1.0, 1.0].map(z => (<mesh key={`${x}-${z}`} position={[x, 0.05, z]}><cylinderGeometry args={[0.04, 0.04, 0.05]} /><meshStandardMaterial color="#cbd5e1" /></mesh>)))}
+                        </group>
+                        <group position={[-0.8, 0, 0]}><mesh rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.35, 0.4, 0.5]} /><meshStandardMaterial color={pumpColor} /></mesh></group>
+                        <group position={[0.8, 0, 0]}><mesh rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.35, 0.35, 0.5]} /><meshStandardMaterial color={pumpColor} /></mesh><mesh position={[0.26, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.36, 0.36, 0.05]} /><meshStandardMaterial color="#334155" /></mesh></group>
+                        <group position={[0, -0.2, 0.7]} rotation={[Math.PI / 2, 0, 0]}><mesh position={[0, 0.3, 0]}><cylinderGeometry args={[0.6, 0.7, 0.6]} /><meshStandardMaterial color={pumpColor} /></mesh><mesh position={[0, 0.65, 0]}><cylinderGeometry args={[0.85, 0.85, 0.1]} /><meshStandardMaterial color="#94a3b8" /></mesh><mesh position={[0, 0.72, 0]}><cylinderGeometry args={[0.6, 0.6, 0.05]} /><meshBasicMaterial color="#000000" /></mesh></group>
+                        <group position={[0, -0.2, -0.7]} rotation={[-Math.PI / 2, 0, 0]}><mesh position={[0, 0.3, 0]}><cylinderGeometry args={[0.5, 0.6, 0.6]} /><meshStandardMaterial color={pumpColor} /></mesh><mesh position={[0, 0.65, 0]}><cylinderGeometry args={[0.75, 0.75, 0.1]} /><meshStandardMaterial color="#94a3b8" /></mesh><mesh position={[0, 0.72, 0]}><cylinderGeometry args={[0.5, 0.5, 0.05]} /><meshBasicMaterial color="#000000" /></mesh></group>
+                        <group position={[0, 1.2, -0.4]} rotation={[0, Math.PI, 0]}><mesh position={[0, -0.2, 0]}><cylinderGeometry args={[0.03, 0.03, 0.4]} /><meshStandardMaterial color="#cbd5e1" /></mesh><mesh position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.2, 0.2, 0.08]} /><meshStandardMaterial color="#ffffff" /></mesh><mesh position={[0, 0.1, 0.05]} rotation={[0, 0, -Math.PI / 6]}><boxGeometry args={[0.02, 0.12, 0.01]} /><meshBasicMaterial color="#ef4444" /></mesh></group>
+                    </group>
+                    <mesh position={[0.5, 0.8, 0]}><boxGeometry args={[8.0, 4.0, 3.5]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
                 </group>
             )}
-            <Label text={label} selected={isSelected} hovered={isHovered} height={isVertical ? 5 : 3.5} />
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={isVertical ? 5 : 3.5} />
         </group>
     );
 };
 
-const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const isPlate = type === 'HX_PLATE'; const metal = "#94a3b8"; const frameColor = "#0f172a";
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
@@ -470,7 +714,7 @@ const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, is
                     {[[0.5, 1.2], [-0.5, 1.2], [0.5, -1.2], [-0.5, -1.2]].map((pos, idx) => (<group key={idx} position={[pos[0], pos[1], 1.3]} rotation={[Math.PI / 2, 0, 0]}><mesh><cylinderGeometry args={[0.25, 0.25, 0.4]} /><meshStandardMaterial color={metal} /></mesh><mesh position={[0, 0.2, 0]}><cylinderGeometry args={[0.4, 0.4, 0.05]} /><meshStandardMaterial color={metal} /></mesh></group>))}
                     <mesh position={[0, -1.85, 1.2]}><boxGeometry args={[0.5, 0.5, 0.1]} /><meshStandardMaterial color={frameColor} /></mesh>
                     <mesh position={[0, -1.85, -1.2]}><boxGeometry args={[0.5, 0.5, 0.1]} /><meshStandardMaterial color={frameColor} /></mesh>
-                    <mesh position={[0, 0, 0]}><boxGeometry args={[2.5, 4, 3]} /><meshBasicMaterial transparent opacity={0} /></mesh>
+                    <mesh position={[0, 0, 0]}><boxGeometry args={[2.5, 4, 3]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
                 </group>
             ) : (
                 <group position={[0, 1.8, 0]}>
@@ -481,28 +725,308 @@ const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, is
                     <mesh position={[2, -1.5, 0]}><cylinderGeometry args={[0.6, 0.6, 1.2]} /><meshStandardMaterial color={metal} /></mesh>
                     <mesh position={[-2.5, -1.8, 0]}><boxGeometry args={[0.8, 1.2, 2.5]} /><meshStandardMaterial color="#334155" /></mesh>
                     <mesh position={[2.5, -1.8, 0]}><boxGeometry args={[0.8, 1.2, 2.5]} /><meshStandardMaterial color="#334155" /></mesh>
-                    <mesh position={[0, 0, 0]}><boxGeometry args={[8, 3.5, 3.5]} /><meshBasicMaterial transparent opacity={0} /></mesh>
+                    <mesh position={[0, 0, 0]}><boxGeometry args={[8, 3.5, 3.5]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
                 </group>
             )}
-            <Label text={label} selected={isSelected} hovered={isHovered} height={isPlate ? 4.5 : 4.5} />
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={isPlate ? 4.5 : 4.5} />
         </group>
     );
 };
 
-const StorageTank = ({ position, rotation, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+const DrainCooler = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const shellColor = "#94a3b8";
+    const nozzleColor = "#64748b";
+    const saddleColor = "#334155";
+    const flangeColor = "#cbd5e1";
+
+    const renderBolts = (count, radius, axis = 'y') => {
+        return Array.from({ length: count }).map((_, i) => {
+            const angle = (i / count) * Math.PI * 2;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            return (
+                <mesh key={i} position={axis === 'z' ? [x, z, 0] : [x, 0, z]} rotation={axis === 'z' ? [0, 0, Math.PI / 2] : [0, 0, 0]}>
+                    <cylinderGeometry args={[0.02, 0.02, 0.05]} /><meshStandardMaterial color="#1e293b" />
+                </mesh>
+            );
+        });
+    };
+
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
-            <group position={[0, 2, 0]}>
-                <mesh castShadow><cylinderGeometry args={[1.8, 1.8, 3.5, 32]} /><meshStandardMaterial color="#cbd5e1" metalness={0.3} /></mesh>
-                <mesh position={[0, 1.75, 0]}><sphereGeometry args={[1.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color="#cbd5e1" metalness={0.3} /></mesh>
-                <mesh position={[0, -1.75, 0]} rotation={[Math.PI, 0, 0]}><sphereGeometry args={[1.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color="#cbd5e1" metalness={0.3} /></mesh>
-                {[45, 135, 225, 315].map(deg => { const rad = deg * Math.PI / 180; return (<mesh key={deg} position={[Math.sin(rad) * 1.5, -2.5, Math.cos(rad) * 1.5]} rotation={[0, 0, 0]}><cylinderGeometry args={[0.1, 0.1, 1.8]} /><meshStandardMaterial color="#475569" /></mesh>) })}
-                <mesh position={[0, 0, 0]}><cylinderGeometry args={[2, 2, 6]} /><meshBasicMaterial transparent opacity={0} /></mesh>
+            <group position={[0, 0.8, 0]}>
+                <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.5, 0.5, 2.5, 32]} /><meshStandardMaterial color={shellColor} roughness={0.4} /></mesh>
+                <group position={[1.35, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                    <mesh><cylinderGeometry args={[0.5, 0.5, 0.2]} /><meshStandardMaterial color={shellColor} /></mesh>
+                    <mesh position={[0, 0.15, 0]}><sphereGeometry args={[0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={shellColor} /></mesh>
+                    <mesh position={[0, -0.15, 0]}><cylinderGeometry args={[0.55, 0.55, 0.1]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                    <group position={[0, -0.15, 0]}>{renderBolts(12, 0.5, 'y')}</group>
+                </group>
+                <group position={[-1.35, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+                    <mesh><cylinderGeometry args={[0.5, 0.5, 0.2]} /><meshStandardMaterial color={shellColor} /></mesh>
+                    <mesh position={[0, 0.15, 0]}><sphereGeometry args={[0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={shellColor} /></mesh>
+                    <mesh position={[0, -0.15, 0]}><cylinderGeometry args={[0.55, 0.55, 0.1]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                    <group position={[0, -0.15, 0]}>{renderBolts(12, 0.5, 'y')}</group>
+                </group>
+                <group position={[-0.6, 0.5, 0]}><mesh><cylinderGeometry args={[0.15, 0.15, 0.4]} /><meshStandardMaterial color={nozzleColor} /></mesh><mesh position={[0, 0.2, 0]}><cylinderGeometry args={[0.2, 0.2, 0.05]} /><meshStandardMaterial color={flangeColor} /></mesh></group>
+                <group position={[0.6, -0.5, 0]}><mesh><cylinderGeometry args={[0.15, 0.15, 0.4]} /><meshStandardMaterial color={nozzleColor} /></mesh><mesh position={[0, -0.2, 0]}><cylinderGeometry args={[0.2, 0.2, 0.05]} /><meshStandardMaterial color={flangeColor} /></mesh></group>
+                <group position={[-0.8, -0.6, 0]}><mesh><boxGeometry args={[0.2, 0.6, 0.8]} /><meshStandardMaterial color={saddleColor} /></mesh><mesh position={[0, -0.35, 0]}><boxGeometry args={[0.4, 0.1, 1.0]} /><meshStandardMaterial color={saddleColor} /></mesh></group>
+                <group position={[0.8, -0.6, 0]}><mesh><boxGeometry args={[0.2, 0.6, 0.8]} /><meshStandardMaterial color={saddleColor} /></mesh><mesh position={[0, -0.35, 0]}><boxGeometry args={[0.4, 0.1, 1.0]} /><meshStandardMaterial color={saddleColor} /></mesh></group>
             </group>
-            <Label text={label} selected={isSelected} hovered={isHovered} height={6} />
+            <mesh position={[0, 0.8, 0]}><boxGeometry args={[3.0, 1.5, 1.2]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={2.0} />
         </group>
     );
 };
+
+const GeneratorBusSystem = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const pipeColor = "#e5e7eb";
+    const bellowsColor = "#1f2937";
+    const cabinetColor = "#f8fafc";
+    const supportColor = "#64748b";
+    const baseColor = "#15803d";
+    const flangeColor = "#d1d5db";
+
+    const renderRealBellows = (pos, axis = 'y') => {
+        const rotation = axis === 'y' ? [Math.PI / 2, 0, 0] : [0, 0, 0];
+        return (
+            <group position={pos} rotation={rotation}>
+                {[0, 0.08, 0.16, 0.24, 0.32].map((offset, i) => (
+                    <mesh key={i} position={[0, 0, offset - 0.16]}><torusGeometry args={[0.36, 0.04, 16, 32]} /><meshStandardMaterial color={bellowsColor} roughness={0.7} /></mesh>
+                ))}
+                <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.34, 0.34, 0.45]} /><meshStandardMaterial color="#111" /></mesh>
+                <mesh position={[0, 0, 0.25]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.42, 0.42, 0.05]} /><meshStandardMaterial color={flangeColor} /></mesh>
+                <mesh position={[0, 0, -0.25]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.42, 0.42, 0.05]} /><meshStandardMaterial color={flangeColor} /></mesh>
+            </group>
+        );
+    };
+
+    const renderPhase = (xPos) => (
+        <group position={[xPos, 0, 0]}>
+            <mesh position={[0, 4.95, 0]} castShadow><cylinderGeometry args={[0.32, 0.32, 1.5, 32]} /><meshStandardMaterial color={pipeColor} metalness={0.1} roughness={0.2} /></mesh>
+            {renderRealBellows([0, 3.95, 0], 'y')}
+            <group position={[0, 3.4, 0]}>
+                <mesh><cylinderGeometry args={[0.32, 0.32, 0.6]} /><meshStandardMaterial color={pipeColor} /></mesh>
+                <mesh position={[0, -0.1, 0]}><sphereGeometry args={[0.33, 32, 32]} /><meshStandardMaterial color={pipeColor} /></mesh>
+                <mesh position={[0, -0.1, 0.4]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.32, 0.32, 0.8]} /><meshStandardMaterial color={pipeColor} /></mesh>
+            </group>
+            {renderRealBellows([0, 3.3, 1.05], 'z')}
+            <mesh position={[0, 3.3, 2.8]} rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[0.32, 0.32, 3.0, 32]} /><meshStandardMaterial color={pipeColor} metalness={0.1} roughness={0.2} /></mesh>
+            <group position={[0, 2.8, 0]}>
+                <mesh><cylinderGeometry args={[0.25, 0.25, 0.6]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+                <mesh position={[0, -0.25, 0]}><boxGeometry args={[0.5, 0.1, 0.5]} /><meshStandardMaterial color="#94a3b8" /></mesh>
+            </group>
+        </group>
+    );
+
+    return (
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+            <group position={[0, 0, 0]}>
+                <mesh position={[0, 0.05, 0]}><boxGeometry args={[2.9, 0.1, 1.1]} /><meshStandardMaterial color="#334155" /></mesh>
+                <mesh position={[0, 1.3, 0]} castShadow receiveShadow><boxGeometry args={[2.8, 2.4, 1.0]} /><meshStandardMaterial color={cabinetColor} /></mesh>
+                {[-0.9, 0, 0.9].map((x, i) => (
+                    <group key={i} position={[x, 1.3, 0.51]}>
+                        <mesh><planeGeometry args={[0.85, 2.3]} /><meshStandardMaterial color={cabinetColor} /></mesh>
+                        <mesh position={[0, 0, 0.01]}><lineSegments><edgesGeometry args={[new THREE.PlaneGeometry(0.85, 2.3)]} /><lineBasicMaterial color="#cbd5e1" /></lineSegments></mesh>
+                        <mesh position={[0.35, 0.1, 0.02]}><boxGeometry args={[0.05, 0.3, 0.02]} /><meshStandardMaterial color="#334155" /></mesh>
+                    </group>
+                ))}
+            </group>
+
+            {renderPhase(-1.0)}
+            {renderPhase(0)}
+            {renderPhase(1.0)}
+
+            <group position={[0, 0, 3.8]}>
+                <group position={[-1.6, 0, 0]}>
+                    <mesh position={[0, 0.25, 0]}><boxGeometry args={[0.4, 0.5, 0.4]} /><meshStandardMaterial color={baseColor} /></mesh>
+                    <mesh position={[0, 1.7, 0]}><boxGeometry args={[0.15, 2.4, 0.15]} /><meshStandardMaterial color={supportColor} /></mesh>
+                </group>
+                <group position={[1.6, 0, 0]}>
+                    <mesh position={[0, 0.25, 0]}><boxGeometry args={[0.4, 0.5, 0.4]} /><meshStandardMaterial color={baseColor} /></mesh>
+                    <mesh position={[0, 1.7, 0]}><boxGeometry args={[0.15, 2.4, 0.15]} /><meshStandardMaterial color={supportColor} /></mesh>
+                </group>
+                <mesh position={[0, 2.975, 0]}><boxGeometry args={[3.8, 0.15, 0.15]} /><meshStandardMaterial color={supportColor} /></mesh>
+                {[-1.0, 0, 1.0].map((x, i) => (
+                    <mesh key={i} position={[x, 3.125, 0]}>
+                        <boxGeometry args={[0.3, 0.15, 0.1]} />
+                        <meshStandardMaterial color={supportColor} />
+                    </mesh>
+                ))}
+            </group>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={5.8} />
+        </group>
+    );
+};
+
+const StorageTank = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const isSquare = type === 'TANK_SQUARE';
+    const bodyColor = "#cbd5e1";
+    const ribColor = "#64748b";
+    const ladderColor = "#475569";
+    const gaugeFrame = "#334155";
+
+    const renderLadder = (height, xPos, zPos, rotY = 0) => (
+        <group position={[xPos, 0, zPos]} rotation={[0, rotY, 0]}>
+            <mesh position={[-0.25, 0, 0]}><cylinderGeometry args={[0.03, 0.03, height]} /><meshStandardMaterial color={ladderColor} /></mesh>
+            <mesh position={[0.25, 0, 0]}><cylinderGeometry args={[0.03, 0.03, height]} /><meshStandardMaterial color={ladderColor} /></mesh>
+            {Array.from({ length: Math.floor(height * 3.3) }).map((_, i) => (
+                <mesh key={`rung-${i}`} position={[0, -height / 2 + i * 0.3 + 0.15, 0]} rotation={[0, 0, Math.PI / 2]}>
+                    <cylinderGeometry args={[0.02, 0.02, 0.5]} />
+                    <meshStandardMaterial color={ladderColor} />
+                </mesh>
+            ))}
+            {Array.from({ length: Math.floor(height / 1.2) }).map((_, i) => {
+                const y = -height / 2 + i * 1.2 + 0.6;
+                return (
+                    <group key={`bracket-${i}`} position={[0, y, -0.2]}>
+                        <mesh position={[-0.25, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.02, 0.02, 0.4]} /><meshStandardMaterial color={ladderColor} /></mesh>
+                        <mesh position={[0.25, 0, 0]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.02, 0.02, 0.4]} /><meshStandardMaterial color={ladderColor} /></mesh>
+                        <mesh position={[-0.25, 0, -0.2]}><boxGeometry args={[0.08, 0.08, 0.02]} /><meshStandardMaterial color={ladderColor} /></mesh>
+                        <mesh position={[0.25, 0, -0.2]}><boxGeometry args={[0.08, 0.08, 0.02]} /><meshStandardMaterial color={ladderColor} /></mesh>
+                    </group>
+                );
+            })}
+        </group>
+    );
+
+    const renderLevelGauge = (height, x, z, rotY = 0) => (
+        <group position={[x, 0, z]} rotation={[0, rotY, 0]}>
+            <mesh position={[0, 0, -0.05]}><boxGeometry args={[0.2, height, 0.05]} /><meshStandardMaterial color={gaugeFrame} /></mesh>
+            <mesh position={[0, 0, 0.02]}><cylinderGeometry args={[0.04, 0.04, height - 0.1]} /><meshStandardMaterial color="#e2e8f0" transparent opacity={0.3} /></mesh>
+            <mesh position={[0, -height * 0.15, 0.02]}><cylinderGeometry args={[0.03, 0.03, height * 0.7]} /><meshStandardMaterial color="#0ea5e9" emissive="#0ea5e9" emissiveIntensity={0.6} /></mesh>
+        </group>
+    );
+
+    return (
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+            {isSquare ? (
+                <group position={[0, 2.0, 0]}>
+                    <mesh castShadow receiveShadow>
+                        <boxGeometry args={[3.5, 4.0, 3.5]} />
+                        <meshStandardMaterial color={bodyColor} roughness={0.3} />
+                    </mesh>
+                    {[-1.2, 0, 1.2].map((y, i) => (
+                        <group key={i} position={[0, y, 0]}>
+                            <mesh position={[0, 0, 1.76]}><boxGeometry args={[3.6, 0.15, 0.05]} /><meshStandardMaterial color={ribColor} /></mesh>
+                            <mesh position={[0, 0, -1.76]}><boxGeometry args={[3.6, 0.15, 0.05]} /><meshStandardMaterial color={ribColor} /></mesh>
+                            <mesh position={[1.76, 0, 0]} rotation={[0, Math.PI / 2, 0]}><boxGeometry args={[3.6, 0.15, 0.05]} /><meshStandardMaterial color={ribColor} /></mesh>
+                            <mesh position={[-1.76, 0, 0]} rotation={[0, Math.PI / 2, 0]}><boxGeometry args={[3.6, 0.15, 0.05]} /><meshStandardMaterial color={ribColor} /></mesh>
+                        </group>
+                    ))}
+                    {renderLevelGauge(2.5, 1.0, 1.8)}
+                    {renderLadder(4.2, -2.05, 0, -Math.PI / 2)}
+                    <mesh position={[0, 2.05, 0]}><cylinderGeometry args={[0.6, 0.6, 0.1]} /><meshStandardMaterial color="#475569" /></mesh>
+                </group>
+
+            ) : (
+                <group position={[0, 2.5, 0]}>
+                    <mesh castShadow receiveShadow><cylinderGeometry args={[1.8, 1.8, 4.0, 32]} /><meshStandardMaterial color={bodyColor} metalness={0.2} roughness={0.4} /></mesh>
+                    <mesh position={[0, 2.0, 0]}><sphereGeometry args={[1.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={bodyColor} /></mesh>
+                    <mesh position={[0, -2.0, 0]} rotation={[Math.PI, 0, 0]}><sphereGeometry args={[1.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={bodyColor} /></mesh>
+                    <group rotation={[0, Math.PI / 2, 0]}>{renderLevelGauge(3.0, 1.85, 0)}</group>
+                    {[45, 135, 225, 315].map((deg, i) => {
+                        const rad = deg * Math.PI / 180;
+                        return (
+                            <group key={i} position={[Math.sin(rad) * 1.5, -2.5, Math.cos(rad) * 1.5]}>
+                                <mesh><cylinderGeometry args={[0.12, 0.12, 1.5]} /><meshStandardMaterial color={ribColor} /></mesh>
+                                <mesh position={[0, -0.75, 0]}><cylinderGeometry args={[0.25, 0.25, 0.1]} /><meshStandardMaterial color={ribColor} /></mesh>
+                            </group>
+                        );
+                    })}
+                    <mesh position={[0, 2.5, 0]}><cylinderGeometry args={[0.5, 0.5, 0.2]} /><meshStandardMaterial color={ribColor} /></mesh>
+                </group>
+            )}
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={isSquare ? 4.8 : 6.0} />
+        </group>
+    );
+};
+
+const IndustrialFan = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const housingColor = "#334155";
+    const motorColor = "#475569";
+    const baseColor = "#1e293b";
+    return (
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+            <group position={[0, 1.0, 0]}>
+                <mesh position={[0, -0.9, 0]} castShadow><boxGeometry args={[1.5, 0.15, 1.0]} /><meshStandardMaterial color={baseColor} /></mesh>
+                <group position={[-0.3, -0.1, 0]} rotation={[0, 0, Math.PI / 2]}>
+                    <mesh castShadow><cylinderGeometry args={[0.25, 0.25, 0.6]} /><meshStandardMaterial color={motorColor} /></mesh>
+                    {[...Array(5)].map((_, i) => (<mesh key={i} position={[0, -0.2 + i * 0.1, 0]}><cylinderGeometry args={[0.27, 0.27, 0.02]} /><meshStandardMaterial color={motorColor} /></mesh>))}
+                    <mesh position={[0.15, 0.2, 0]}><boxGeometry args={[0.12, 0.15, 0.15]} /><meshStandardMaterial color={motorColor} /></mesh>
+                </group>
+                <group position={[0.3, 0, 0]}>
+                    <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.6, 0.6, 0.35, 32]} /><meshStandardMaterial color={housingColor} /></mesh>
+                    <mesh position={[0.18, 0, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.25, 0.25, 0.05]} /><meshStandardMaterial color="#0f172a" /></mesh>
+                    <mesh position={[0, 0.5, 0.3]}><boxGeometry args={[0.35, 0.6, 0.4]} /><meshStandardMaterial color={housingColor} /></mesh>
+                    <mesh position={[0, 0.8, 0.3]}><boxGeometry args={[0.45, 0.05, 0.5]} /><meshStandardMaterial color="#64748b" /></mesh>
+                </group>
+                <mesh position={[0, -0.1, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.08, 0.08, 0.2]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+            </group>
+            <mesh position={[0, 0.8, 0]}><boxGeometry args={[1.5, 1.8, 1.0]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={2.0} />
+        </group>
+    );
+};
+
+const DifferentialFilter = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+    const housingColor = "#cbd5e1";
+    const pipeColor = "#94a3b8";
+    const valveColor = "#334155";
+    const handleColor = "#1e293b";
+    const gaugeColor = "#ffffff";
+    const tubeColor = "#f59e0b";
+
+    const renderBolts = (count, radius, y) => Array.from({ length: count }).map((_, i) => (
+        <mesh key={i} position={[Math.cos(i / count * Math.PI * 2) * radius, y, Math.sin(i / count * Math.PI * 2) * radius]}>
+            <cylinderGeometry args={[0.015, 0.015, 0.04]} /><meshStandardMaterial color="#475569" />
+        </mesh>
+    ));
+
+    const renderFilterHousing = (xPos) => (
+        <group position={[xPos, 0, 0]}>
+            <mesh castShadow><cylinderGeometry args={[0.25, 0.25, 1.0, 32]} /><meshStandardMaterial color={housingColor} roughness={0.3} /></mesh>
+            <mesh position={[0, 0.52, 0]}><cylinderGeometry args={[0.28, 0.28, 0.08]} /><meshStandardMaterial color={housingColor} /></mesh>
+            <group position={[0, 0.55, 0]}>{renderBolts(8, 0.24, 0)}</group>
+            <mesh position={[0, 0.6, 0]}><sphereGeometry args={[0.25, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={housingColor} /></mesh>
+            <mesh position={[0, 0.85, 0]}><cylinderGeometry args={[0.04, 0.04, 0.08]} /><meshStandardMaterial color="#64748b" /></mesh>
+            <mesh position={[0, -0.5, 0]}><sphereGeometry args={[0.25, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI]} /><meshStandardMaterial color={housingColor} /></mesh>
+            <mesh position={[0, -0.78, 0]}><cylinderGeometry args={[0.04, 0.04, 0.08]} /><meshStandardMaterial color="#64748b" /></mesh>
+            <mesh position={[0, -0.9, 0]}><cylinderGeometry args={[0.04, 0.04, 0.3]} /><meshStandardMaterial color="#333" /></mesh>
+            <mesh position={[0, -1.05, 0]}><cylinderGeometry args={[0.1, 0.1, 0.02]} /><meshStandardMaterial color="#333" /></mesh>
+        </group>
+    );
+
+    return (
+        <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
+            <group position={[0, 1.0, 0]}>
+                {renderFilterHousing(-0.35)}
+                {renderFilterHousing(0.35)}
+                <group position={[0, 0, 0]}>
+                    <mesh position={[0, 0.2, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.08, 0.08, 0.8]} /><meshStandardMaterial color={pipeColor} /></mesh>
+                    <mesh position={[0, -0.2, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.08, 0.08, 0.8]} /><meshStandardMaterial color={pipeColor} /></mesh>
+                    <mesh position={[0, 0, 0]}><boxGeometry args={[0.25, 0.6, 0.25]} /><meshStandardMaterial color={valveColor} /></mesh>
+                    <group position={[0, 0.35, 0.15]} rotation={[Math.PI / 4, 0, 0]}>
+                        <mesh><cylinderGeometry args={[0.02, 0.02, 0.15]} /><meshStandardMaterial color="#cbd5e1" /></mesh>
+                        <mesh position={[0, 0.1, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.03, 0.03, 0.4]} /><meshStandardMaterial color={handleColor} /></mesh>
+                    </group>
+                </group>
+                <group position={[0, 0.5, 0.2]}>
+                    <mesh rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[0.12, 0.12, 0.05]} /><meshStandardMaterial color="#111" /></mesh>
+                    <mesh position={[0, 0, 0.03]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.1, 0.1, 0.01]} /><meshStandardMaterial color={gaugeColor} /></mesh>
+                    <mesh position={[0, 0.02, 0.04]} rotation={[0, 0, -Math.PI / 4]}><boxGeometry args={[0.01, 0.1, 0.01]} /><meshStandardMaterial color="#dc2626" /></mesh>
+                    <mesh position={[-0.05, -0.1, -0.05]}><cylinderGeometry args={[0.008, 0.008, 0.2]} /><meshStandardMaterial color={tubeColor} /></mesh>
+                    <mesh position={[0.05, -0.3, -0.05]}><cylinderGeometry args={[0.008, 0.008, 0.4]} /><meshStandardMaterial color={tubeColor} /></mesh>
+                </group>
+                <mesh position={[-0.5, 0.2, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.12, 0.12, 0.05]} /><meshStandardMaterial color="#64748b" /></mesh>
+                <mesh position={[0.5, 0.2, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.12, 0.12, 0.05]} /><meshStandardMaterial color="#64748b" /></mesh>
+            </group>
+            <mesh position={[0, 0.8, 0]}><boxGeometry args={[1.5, 2.5, 1.0]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+            <Label text={label} selected={isSelected} hovered={isHovered} forceShow={showLabel} height={2.2} />
+        </group>
+    );
+};
+
 
 const FloorPlane = ({ onFloorClick, editMode, isDark }) => {
     const [texture, setTexture] = useState(null);
@@ -512,35 +1036,199 @@ const FloorPlane = ({ onFloorClick, editMode, isDark }) => {
     const floorColor = isDark ? "#0f172a" : "#64748b";
     const gridColor1 = isDark ? "#1e293b" : "#94a3b8";
     const gridColor2 = isDark ? "#334155" : "#cbd5e1";
+
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow onClick={(e) => { if (!editMode || e.button !== 0 || e.delta > 2) return; e.stopPropagation(); onFloorClick(e.point); }}>
             <planeGeometry args={[100, 100]} />
-            {texture ? <meshStandardMaterial map={texture} transparent opacity={0.9} side={THREE.DoubleSide} /> : <meshStandardMaterial color={floorColor} roughness={0.8} metalness={0.1} />}
+            {texture ? (
+                <meshStandardMaterial map={texture} transparent opacity={0.6} side={THREE.DoubleSide} />
+            ) : (
+                <meshStandardMaterial color={floorColor} transparent opacity={0.6} roughness={0.8} metalness={0.1} />
+            )}
+
             <gridHelper args={[100, 20, gridColor1, gridColor2]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} />
         </mesh>
     );
 };
 
+// 🌟 [UI 수정] 베리어블 드롭다운 스타일 적용 + 기존 슬라이더/버튼 UI 복구
 const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
+    // 드롭다운 열림/닫힘 상태 관리
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // 외부 클릭 시 드롭다운 닫기 위한 Ref
+    const dropdownRef = useRef(null);
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
     if (!item) return null;
+
+    // 🛠️ 지능형 목록 로직 (기존 유지)
+    const getVariableTypeOptions = () => {
+        for (const group of TOOL_HIERARCHY) {
+            if (group.children) {
+                for (const category of group.children) {
+                    // 1. 밸브류 등 서브메뉴가 있는 경우
+                    if (category.children && category.children.some(c => c.type === item.type)) {
+                        return { label: category.label, options: category.children };
+                    }
+                    // 2. 펌프/열교환기 등 접두사로 묶인 경우
+                    if (category.type === item.type) {
+                        if (item.type.includes('PUMP')) return { label: '펌프 타입 선택', options: group.children.filter(c => c.type && c.type.includes('PUMP')) };
+                        if (item.type.includes('HX')) return { label: '열교환기 타입 선택', options: group.children.filter(c => c.type && c.type.includes('HX')) };
+                    }
+                }
+            }
+        }
+        return { label: '설비 타입', options: [{ label: item.label, type: item.type }] };
+    };
+
+    const { label: groupLabel, options: typeOptions } = getVariableTypeOptions();
+
+    // 현재 선택된 타입의 라벨 찾기
+    const currentOptionLabel = typeOptions.find(opt => opt.type === item.type)?.label || item.label;
+
     return (
         <div className="absolute top-20 right-4 w-72 bg-white/95 dark:bg-zinc-900/95 backdrop-blur shadow-2xl rounded-2xl border border-zinc-200 dark:border-zinc-700 p-5 z-20 animate-fade-in-right">
+
+            {/* 헤더 */}
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                <h3 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2"><Edit3 size={16} className="text-indigo-500" /> 속성 편집</h3>
-                <button onClick={onClose}><X size={18} className="text-zinc-400 hover:text-zinc-600" /></button>
+                <h3 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                    <Edit3 size={16} className="text-indigo-500" /> 속성 편집
+                </h3>
+                <button onClick={onClose}>
+                    <X size={18} className="text-zinc-400 hover:text-zinc-600" />
+                </button>
             </div>
+
             <div className="space-y-4">
-                <div><label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">설비 명칭</label><input type="text" value={item.label || ""} onChange={(e) => onUpdate({ ...item, label: e.target.value })} className="w-full text-sm p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black outline-none text-zinc-900 dark:text-zinc-100" /></div>
-                <div><div className="flex justify-between mb-1"><label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">높이</label><span className="text-[10px] font-mono text-zinc-500">{item.y || 0}m</span></div><input type="range" min="-10" max="20" step="0.5" value={item.y || 0} onChange={(e) => onUpdate({ ...item, y: parseFloat(e.target.value) })} className="w-full h-1 bg-zinc-200 rounded-lg cursor-pointer" /></div>
-                <div><div className="flex justify-between mb-1"><label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">크기</label><span className="text-[10px] font-mono text-zinc-500">x{item.scale || 1}</span></div><input type="range" min="0.5" max="3.0" step="0.1" value={item.scale || 1} onChange={(e) => onUpdate({ ...item, scale: parseFloat(e.target.value) })} className="w-full h-1 bg-zinc-200 rounded-lg cursor-pointer" /></div>
+
+                {/* 🌟 1. 베리어블 드롭다운 UI (Variable Dropdown Style) */}
+                {typeOptions.length > 1 && (
+                    <div className="relative" ref={dropdownRef}>
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">
+                            {groupLabel}
+                        </label>
+
+                        {/* 드롭다운 트리거 버튼 */}
+                        <button
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg border flex justify-between items-center text-sm font-medium transition-all
+                                ${isDropdownOpen
+                                    ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400'
+                                    : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                                }`}
+                        >
+                            <span>{currentOptionLabel}</span>
+                            <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-indigo-500' : 'text-zinc-400'}`} />
+                        </button>
+
+                        {/* 드롭다운 목록 (Custom List) */}
+                        {isDropdownOpen && (
+                            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animate-fade-in-down p-1">
+                                {typeOptions.map((opt) => (
+                                    <button
+                                        key={opt.type}
+                                        onClick={() => {
+                                            onUpdate({ ...item, type: opt.type });
+                                            setIsDropdownOpen(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs rounded-md transition-colors flex items-center gap-2
+                                            ${item.type === opt.type
+                                                ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold'
+                                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                                            }`}
+                                    >
+                                        {/* 선택된 항목 표시 점 */}
+                                        <div className={`w-1.5 h-1.5 rounded-full ${item.type === opt.type ? 'bg-indigo-500' : 'bg-transparent'}`}></div>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* 2. 설비 명칭 (텍스트 입력) */}
+                <div>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">설비 명칭</label>
+                    <input
+                        type="text"
+                        value={item.label || ""}
+                        onChange={(e) => onUpdate({ ...item, label: e.target.value })}
+                        className="w-full text-sm p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black outline-none text-zinc-900 dark:text-zinc-100 focus:border-indigo-500 transition-colors"
+                    />
+                </div>
+
+                {/* 3. 높이 (기존 슬라이더 UI) */}
+                <div>
+                    <div className="flex justify-between mb-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">높이 (Y)</label>
+                        <span className="text-[10px] font-mono text-zinc-500">{item.y || 0}m</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="-5"
+                        max="20"
+                        step="0.5"
+                        value={item.y || 0}
+                        onChange={(e) => onUpdate({ ...item, y: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
+                    />
+                </div>
+
+                {/* 4. 크기 (기존 슬라이더 UI) */}
+                <div>
+                    <div className="flex justify-between mb-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">크기 (Scale)</label>
+                        <span className="text-[10px] font-mono text-zinc-500">x{item.scale || 1}</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="3.0"
+                        step="0.1"
+                        value={item.scale || 1}
+                        onChange={(e) => onUpdate({ ...item, scale: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
+                    />
+                </div>
+
+                {/* 5. 회전 (기존 버튼식 UI) */}
                 <div>
                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 block">회전</label>
                     <div className="flex gap-2">
-                        <button onClick={() => onUpdate({ ...item, rotation: (item.rotation - Math.PI / 2) })} className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors">↺ -90°</button>
-                        <button onClick={() => onUpdate({ ...item, rotation: (item.rotation + Math.PI / 2) })} className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors">↻ +90°</button>
+                        <button
+                            onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) - Math.PI / 2 })}
+                            className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors"
+                        >
+                            ↺ -90°
+                        </button>
+                        <button
+                            onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) + Math.PI / 2 })}
+                            className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors"
+                        >
+                            ↻ +90°
+                        </button>
                     </div>
                 </div>
-                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2"><button onClick={onDelete} className="w-full py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center justify-center gap-2"><Trash2 size={14} /> 설비 삭제</button></div>
+
+                {/* 6. 삭제 버튼 */}
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                    <button
+                        onClick={onDelete}
+                        className="w-full py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm font-bold flex items-center justify-center gap-2 rounded-lg transition-colors"
+                    >
+                        <Trash2 size={14} /> 설비 삭제
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -548,53 +1236,81 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
 
 const FieldMapContainer = ({ workData }) => {
     const [showToast, setShowToast] = useState(false);
-    // 🌟 상태: 활성화된 건물 ID (초기값: 첫 번째 건물)
     const [activeBuildingId, setActiveBuildingId] = useState(BUILDING_STRUCTURE[0].id);
-
-    // 🌟 상태: 활성화된 층 ID (초기값: 첫 번째 건물의 첫 번째 층)
     const [activeFloorId, setActiveFloorId] = useState(BUILDING_STRUCTURE[0].floors[0]);
-
-    // 🌟 계산: 데이터 저장을 위한 고유 키 생성 (예: "STEAM-2F")
     const currentStorageKey = useMemo(() => `${activeBuildingId}-${activeFloorId}`, [activeBuildingId, activeFloorId]);
 
-    // 🌟 데이터 로딩 로직: 건물별/층별 데이터 관리
-    const [allFloorData, setAllFloorData] = useState(() => {
-        let initData = {};
+    const [allFloorData, setAllFloorData, undo, redo] = useUndoRedo({});
 
-        // 1. 외부 props나 localStorage에서 데이터 로드
-        if (workData && workData.mapData) {
-            initData = workData.mapData;
-        } else {
-            const saved = localStorage.getItem('myFieldMapData');
-            if (saved) initData = JSON.parse(saved);
-        }
+    const equipmentCategories = useMemo(() => {
+        const group = TOOL_HIERARCHY.find(g => g.id === 'EQUIPMENT');
+        return group ? group.children.map(c => c.label) : [];
+    }, []);
 
-        // 2. 데이터 정규화 및 마이그레이션 (기존 '2F' -> 'STEAM-2F'로 매핑)
-        const normalizedData = {};
-        Object.keys(initData).forEach(key => {
-            let newKey = key;
-            // 만약 키가 층 이름만 있다면(예: '2F'), 기본 건물(STEAM)에 할당
-            if (!key.includes('-') && BUILDING_STRUCTURE[0].floors.includes(key)) {
-                newKey = `STEAM-${key}`;
+    // 필터 토글 핸들러
+    const toggleLabelVisibility = (category) => {
+        setVisibleLabels(prev => ({
+            ...prev,
+            [category]: !prev[category]
+        }));
+    };
+
+    const [visibleLabels, setVisibleLabels] = useState({});
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
             }
+        };
 
-            normalizedData[newKey] = (initData[key] || []).map((item, index) => ({
-                ...item,
-                id: item.id || `static_${newKey}_${index}_${Date.now()}`,
-                x: Number(item.x) || 0,
-                y: Number(item.y) || 0,
-                z: Number(item.z) || 0,
-                rotation: Number(item.rotation) || 0,
-                scale: Number(item.scale) || 1,
-                label: item.label || 'Unknown'
-            }));
-        });
-        return normalizedData;
-    });
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
 
-    useEffect(() => { localStorage.setItem('myFieldMapData', JSON.stringify(allFloorData)); }, [allFloorData]);
+    useEffect(() => {
+        const loadMapData = async () => {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                const loadedData = await ipcRenderer.invoke('load-map-data');
+                console.log("📂 로드된 데이터:", loadedData);
 
-    // 건물이 변경되면 해당 건물의 첫 번째 층으로 자동 선택
+                const parsedData = {};
+                if (Array.isArray(loadedData)) {
+                    loadedData.forEach(building => {
+                        if (building.floors) {
+                            building.floors.forEach(floor => {
+                                const key = `${building.id}-${floor.id}`;
+                                parsedData[key] = (floor.valves || []).map((item, index) => ({
+                                    ...item,
+                                    id: item.id || `static_${key}_${index}_${Date.now()}`,
+                                    x: Number(item.x) || 0,
+                                    y: Number(item.y) || 0,
+                                    z: Number(item.z) || 0,
+                                    rotation: Number(item.rotation) || 0,
+                                    scale: Number(item.scale) || 1,
+                                    label: item.label || '',
+                                    status: item.status || 'NORMAL'
+                                }));
+                            });
+                        }
+                    });
+                }
+                setAllFloorData(parsedData);
+            } catch (error) {
+                console.error("❌ 로드 실패:", error);
+            }
+        };
+        loadMapData();
+    }, []);
+
     useEffect(() => {
         const building = BUILDING_STRUCTURE.find(b => b.id === activeBuildingId);
         if (building && !building.floors.includes(activeFloorId)) {
@@ -622,7 +1338,6 @@ const FieldMapContainer = ({ workData }) => {
     const [clipboard, setClipboard] = useState(null);
     const orbitControlsRef = useRef(null);
 
-    // 🌟 선택된 아이템 찾기 (현재 활성화된 Key 기준)
     const selectedItem = useMemo(() =>
         allFloorData[currentStorageKey]?.find(item => item.id === selectedId),
         [allFloorData, currentStorageKey, selectedId]
@@ -672,8 +1387,6 @@ const FieldMapContainer = ({ workData }) => {
         if (newSearchIds.length > 0) {
             setSearchIds(newSearchIds);
             setSelectedId(null);
-
-            // 현재 화면에 검색 결과가 없다면 해당 층으로 이동
             const currentFloorHasMatch = (allFloorData[currentStorageKey] || []).some(item => newSearchIds.includes(item.id));
             if (!currentFloorHasMatch && firstMatchKey) {
                 const [bId, fId] = firstMatchKey.split('-');
@@ -688,21 +1401,17 @@ const FieldMapContainer = ({ workData }) => {
         }
     };
 
-    const handleSave = () => {
-        // 1. 현재 화면의 데이터(allFloorData)를 파일 구조(배열)로 변환
+    const handleSave = async () => {
         const dataToSave = BUILDING_STRUCTURE.map(building => ({
             id: building.id,
             name: building.name,
             floors: building.floors.map(floorId => {
-                // 'STEAM-1F' 같은 키를 생성하여 데이터 조회
                 const storageKey = `${building.id}-${floorId}`;
                 const floorItems = allFloorData[storageKey] || [];
 
-                // 층별 데이터 구조 생성
                 return {
                     id: floorId,
-                    label: `${floorId}층`, // 필요 시 mapData의 라벨을 가져오도록 개선 가능
-                    // 화면상의 모든 아이템을 'valves' 키(또는 items)에 저장
+                    label: `${floorId}층`,
                     valves: floorItems.map(item => ({
                         id: item.id,
                         type: item.type,
@@ -711,28 +1420,24 @@ const FieldMapContainer = ({ workData }) => {
                         z: Number(item.z),
                         rotation: Number(item.rotation) || 0,
                         scale: Number(item.scale) || 1,
-                        label: item.label || '', // 🌟 여기서 수정된 명칭(label)이 저장됩니다
+                        label: item.label || '',
                         status: item.status || 'NORMAL'
                     }))
                 };
             })
         }));
 
-        console.log("Saving Converted Data:", dataToSave);
+        console.log("💾 저장할 데이터:", dataToSave);
 
         try {
             const { ipcRenderer } = window.require('electron');
-
-            // 변환된 데이터를 저장 요청
-            ipcRenderer.send('save-map-data', dataToSave);
-
-            // 토스트 메시지 표시
+            await ipcRenderer.invoke('save-map-data', dataToSave);
             setShowToast(true);
             setTimeout(() => setShowToast(false), 2000);
-
+            console.log("✅ 저장 성공!");
         } catch (error) {
-            console.error("저장 실패:", error);
-            alert("저장에 실패했습니다.");
+            console.error("❌ 저장 실패:", error);
+            alert(`저장에 실패했습니다.\n오류: ${error.message}`);
         }
     };
 
@@ -786,7 +1491,6 @@ const FieldMapContainer = ({ workData }) => {
     const handleDragEnd = () => { if (orbitControlsRef.current) orbitControlsRef.current.enabled = true; };
 
     const renderToolbar = () => (
-        // 🌟 [수정] max-w-full 및 flex-nowrap 추가로 줄바꿈 방지
         <div className="flex items-center gap-2 px-2 w-full whitespace-nowrap">
             <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 border border-zinc-200 dark:border-zinc-700 mr-2 flex-shrink-0">
                 <button
@@ -795,7 +1499,6 @@ const FieldMapContainer = ({ workData }) => {
                     className={`px-3 py-1 text-xs font-bold rounded transition-all flex items-center gap-1 ${interactionMode === 'MOVE' ? 'bg-white shadow text-indigo-600' : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
                     <MousePointer2 size={12} />
-                    {/* 화면이 넓을 때(2xl)만 텍스트 표시 */}
                     <span className="hidden 2xl:inline">이동</span>
                 </button>
                 <button
@@ -810,7 +1513,6 @@ const FieldMapContainer = ({ workData }) => {
 
             <div className="w-px h-4 bg-gray-300 mx-1 flex-shrink-0"></div>
 
-            {/* 도구 버튼들 */}
             {TOOL_HIERARCHY.map((category, index) => {
                 const isLastItem = index >= TOOL_HIERARCHY.length - 1;
                 return (
@@ -822,7 +1524,6 @@ const FieldMapContainer = ({ workData }) => {
                             onClick={() => { setActiveCategory(activeCategory === category.id ? null : category.id); if (activeCategory !== category.id) setInteractionMode('MOVE'); }}
                             hasDropdown
                         />
-                        {/* 드롭다운 메뉴 (z-index 높여서 가려짐 방지) */}
                         {activeCategory === category.id && (
                             <div className={`fixed mt-2 w-40 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 z-[9999] flex flex-col p-1 animate-fade-in-up`} style={{ position: 'absolute', top: '100%' }}>
                                 {category.children.map((child, idx) => (<DropdownItem key={idx} item={child} onSelect={(type) => { setActiveTool(type); setActiveCategory(null); setInteractionMode('MOVE'); }} />))}
@@ -838,10 +1539,7 @@ const FieldMapContainer = ({ workData }) => {
 
     return (
         <div className="h-full flex flex-col bg-zinc-100 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden relative">
-
-            {/* 상단: 건물 및 층 선택 영역 */}
             <div className="flex flex-col border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-10 shrink-0">
-                {/* 1. 건물 선택 탭 */}
                 <div className="flex gap-1 p-2 overflow-x-auto scrollbar-hide border-b border-zinc-100 dark:border-zinc-800">
                     {BUILDING_STRUCTURE.map((building) => (
                         <button
@@ -859,9 +1557,7 @@ const FieldMapContainer = ({ workData }) => {
                     ))}
                 </div>
 
-                {/* 2. 층 선택 및 툴바 */}
                 <div className="flex items-center h-12 px-4 gap-4">
-                    {/* 층 목록 */}
                     <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg flex-shrink-0">
                         {currentBuilding?.floors.map(floor => (
                             <button
@@ -881,14 +1577,11 @@ const FieldMapContainer = ({ workData }) => {
 
                     <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700 flex-shrink-0"></div>
 
-                    {/* 중앙 영역: 검색창(일반 모드) 또는 툴바(편집 모드) 표시 */}
                     {editMode ? (
-                        // 편집 모드: 툴바를 중앙 넓은 공간에 배치 + 가로 스크롤 허용
                         <div className="flex-1 mx-2 overflow-visible min-w-0 flex items-center">
                             {renderToolbar()}
                         </div>
                     ) : (
-                        // 일반 모드: 검색창 표시
                         <>
                             <div className="relative group flex-1 max-w-xs ml-4">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
@@ -905,26 +1598,27 @@ const FieldMapContainer = ({ workData }) => {
                         </>
                     )}
 
-                    {/* 편집 모드 토글 버튼 */}
                     <button
                         onClick={() => { setEditMode(!editMode); setActiveTool(null); setSelectedId(null); setSearchIds([]); setActiveCategory(null); setInteractionMode('MOVE'); }}
                         className={`flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center gap-2 transition-colors ml-2 ${editMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50'}`}
                     >
                         <MousePointer2 size={14} />
-                        {/* 화면이 너무 작으면 텍스트 숨김 */}
                         <span className="hidden sm:inline">{editMode ? '종료' : '편집'}</span>
                     </button>
 
-                    {/* 저장 버튼 */}
                     <button onClick={handleSave} className="flex-shrink-0 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 ml-1" title="데이터 저장">
                         <Save size={18} />
                     </button>
                 </div>
-                {/* 닫는 태그 추가 완료 (Header) */}
             </div>
 
-            {/* 3D Canvas 영역 - 🌟 [수정] Header 밖으로 빼냄 */}
             <div className="flex-1 relative bg-zinc-200 dark:from-gray-900 dark:to-black">
+                {/* 🌟 [New] 라벨 필터 UI (3D 창 좌측 상단) */}
+                <LabelFilterPanel
+                    categories={equipmentCategories}
+                    visibleState={visibleLabels}
+                    onToggle={toggleLabelVisibility}
+                />
                 {editMode && selectedId && selectedItem && interactionMode === 'PROP' && (
                     <PropertyPanel item={selectedItem} onUpdate={handleUpdateProps} onDelete={handleDeleteItem} onClose={() => setSelectedId(null)} />
                 )}
@@ -956,29 +1650,54 @@ const FieldMapContainer = ({ workData }) => {
 
                     <FloorPlane onFloorClick={handleAdd} editMode={editMode && activeTool !== null} isDark={isDark} />
 
-                    {/* 선택된 키(건물-층)에 해당하는 데이터만 렌더링 */}
                     {(allFloorData[currentStorageKey] || []).map(item => {
                         const isHighlighted = selectedId === item.id || searchIds.includes(item.id);
                         const { id, ...itemData } = item;
+                        // 🌟 라벨 표시 여부 계산
+                        const category = getCategoryByType(item.type);
+                        const showLabel = visibleLabels[category];
                         const props = {
                             ...itemData,
                             position: [Number(item.x), Number(item.y) || 0, Number(item.z)],
                             itemId: item.id,
                             isSelected: isHighlighted,
+                            type: item.type,
                             isEditMode: editMode,
                             interactionMode: interactionMode,
+                            showLabel: showLabel,
                             onUpdate: handleUpdateItem,
                             onDragStart: handleDragStart,
                             onDragEnd: handleDragEnd,
                             onClick: (e) => { e.stopPropagation(); setSelectedId(item.id); }
                         };
 
+                        if (item.type === 'VALVE_BUTTERFLY_PNEUMATIC') {
+                            return <InteractiveObject key={item.id} Component={PneumaticButterflyValve} {...props} />;
+                        }
+                        if (item.type === 'ELEC_GCB_SYSTEM') {
+                            return <InteractiveObject key={item.id} Component={GeneratorBusSystem} {...props} />;
+                        }
+                        if (item.type === 'HX_DRAIN_COOLER') {
+                            return <InteractiveObject key={item.id} Component={DrainCooler} {...props} />;
+                        }
                         if (item.type === 'FIRE_SHUTTER') return <InteractiveObject key={item.id} Component={FireShutter} {...props} />;
-                        if (item.type === 'VALVE_PIN') return <InteractiveObject key={item.id} Component={ValvePin} {...props} />;
+
+                        // 🌟 [Optimized] 툴바 계층 구조에 있는 밸브 타입만 렌더링
+                        if (['VALVE_MOV', 'VALVE_MULTI_SPRING', 'VALVE_DOUBLE_ACTING', 'VALVE_HYDRAULIC'].includes(item.type)) {
+                            return <InteractiveObject key={item.id} Component={ValvePin} {...props} />;
+                        }
                         if (item.type === 'LCP') return <InteractiveObject key={item.id} Component={LocalControlPanel} {...props} />;
                         if (item.type.includes('PUMP')) return <InteractiveObject key={item.id} Component={IndustrialPump} type={item.type === 'PUMP_VERT' ? 'PUMP_VERTICAL' : 'PUMP_HORIZONTAL'} {...props} />;
                         if (item.type.includes('HX')) return <InteractiveObject key={item.id} Component={HeatExchanger} type={item.type} {...props} />;
-                        if (item.type === 'TANK') return <InteractiveObject key={item.id} Component={StorageTank} {...props} />;
+                        if (['TANK_VERTICAL', 'TANK_SQUARE'].includes(item.type)) {
+                            return <InteractiveObject key={item.id} Component={StorageTank} {...props} />;
+                        }
+                        if (item.type === 'FAN_CENTRIFUGAL') {
+                            return <InteractiveObject key={item.id} Component={IndustrialFan} {...props} />;
+                        }
+                        if (item.type === 'FILTER_DP') {
+                            return <InteractiveObject key={item.id} Component={DifferentialFilter} {...props} />;
+                        }
                         if (item.type.includes('STAIRS')) return <InteractiveObject key={item.id} Component={Stairs} {...props} />;
                         if (item.type === 'DOOR') return <InteractiveObject key={item.id} Component={SecurityDoor} {...props} />;
                         if (item.type === 'LADDER') return <InteractiveObject key={item.id} Component={VerticalLadder} {...props} />;
@@ -992,7 +1711,6 @@ const FieldMapContainer = ({ workData }) => {
     );
 };
 
-// 툴바 버튼 컴포넌트
 const ToolBtn = ({ label, active, onClick, icon: Icon, hasDropdown }) => (
     <button
         onClick={onClick}
@@ -1001,38 +1719,60 @@ const ToolBtn = ({ label, active, onClick, icon: Icon, hasDropdown }) => (
         ${active ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
     >
         {Icon && <Icon size={14} />}
-        {/* 여기 클래스가 hidden 2xl:inline 이어야 합니다 */}
         <span className="hidden 2xl:inline">{label}</span>
         {hasDropdown && <ChevronDown size={12} className={`transition-transform ${active ? 'rotate-180' : ''}`} />}
     </button>
 );
 
-// src/components/work/FieldMap/FieldMapContainer.jsx 내부
-
 const DropdownItem = ({ item, onSelect }) => {
-    const [isHovered, setIsHovered] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
 
     if (item.hasSubMenu) {
         return (
-            <div className="relative" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
-                <button className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-zinc-700 rounded-lg flex justify-between items-center transition-colors">
-                    {item.label}<ChevronRight size={12} className="text-gray-400" />
+            <div
+                className="relative"
+                onMouseEnter={() => setIsOpen(true)}
+                onMouseLeave={() => setIsOpen(false)}
+            >
+                <button
+                    className={`w-full text-left px-3 py-2 text-xs font-medium rounded-lg flex justify-between items-center transition-colors
+                    ${isOpen
+                            ? 'bg-zinc-100 dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400'
+                            : 'text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-zinc-700'
+                        }`}
+                >
+                    {item.label}
+                    <ChevronRight size={12} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
                 </button>
-                {isHovered && (
-                    /* 🌟 [수정] ml-1 제거 (간격 없애기) */
-                    <div className="absolute left-full top-0 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 p-1 animate-fade-in-left z-[9999]">
-                        {item.children.map((subItem, idx) => (
-                            <button key={idx} onClick={() => onSelect(subItem.type)} className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-zinc-700 rounded-lg transition-colors hover:text-indigo-600">
-                                {subItem.label}
-                            </button>
-                        ))}
+
+                {isOpen && (
+                    <div className="w-full pl-2 pr-1 mt-1 space-y-1 animate-fade-in-down origin-top">
+                        <div className="border-l-2 border-zinc-200 dark:border-zinc-600 pl-1 py-1">
+                            {item.children.map((subItem, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelect(subItem.type);
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-zinc-700 rounded-md transition-colors flex items-center gap-2"
+                                >
+                                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-500 shrink-0"></div>
+                                    <span className="truncate">{subItem.label}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
         );
     }
+
     return (
-        <button onClick={() => onSelect(item.type)} className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-zinc-700 rounded-lg transition-colors hover:text-indigo-600">
+        <button
+            onClick={() => onSelect(item.type)}
+            className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-zinc-700 rounded-lg transition-colors hover:text-indigo-600"
+        >
             {item.label}
         </button>
     );

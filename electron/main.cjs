@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-29 14:52:23
+﻿// Last Updated: 2025-12-30 14:33:03
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
@@ -422,8 +422,45 @@ ipcMain.on('open-path', (event, path) => {
         if (error) console.error('Failed to open path:', error);
     });
 });
+// -----------------------------------------------------------------------------
+// 🗺️ [신규 추가] 맵 데이터(mapData.json) 관리 핸들러
+// -----------------------------------------------------------------------------
 
-ipcMain.on('save-map-data', (event, data) => {
-    // mapData.json은 단순 배열이 아니라 구조가 있을 수 있으므로 그대로 저장
-    saveData(DATA_PATHS.mapData, data, 'mapData');
+// 1. 읽기 (Load)
+ipcMain.handle('load-map-data', async () => {
+    try {
+        // 파일이 없으면 빈 배열 반환
+        if (!fs.existsSync(DATA_PATHS.mapData)) return [];
+        
+        // 파일 읽어서 JSON 파싱 후 반환
+        const data = fs.readFileSync(DATA_PATHS.mapData, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error("❌ 맵 데이터 로드 실패:", error);
+        return []; // 에러 나면 빈 배열 반환 (앱 멈춤 방지)
+    }
+});
+
+// 2. 저장 (Save) - 안전한 원자적 저장 방식
+ipcMain.handle('save-map-data', async (event, data) => {
+    const tempPath = `${DATA_PATHS.mapData}.tmp`; // 임시 파일
+    try {
+        // 1) 임시 파일에 먼저 저장
+        fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
+        
+        // 2) 원본 파일과 교체 (파일 깨짐 방지)
+        if (fs.existsSync(DATA_PATHS.mapData)) {
+            try { fs.unlinkSync(DATA_PATHS.mapData); } catch(e) {}
+        }
+        fs.renameSync(tempPath, DATA_PATHS.mapData);
+        
+        console.log("✅ 맵 데이터 저장 완료");
+        return true;
+    } catch (error) {
+        console.error("❌ 맵 데이터 저장 실패:", error);
+        if (fs.existsSync(tempPath)) {
+            try { fs.unlinkSync(tempPath); } catch (e) {}
+        }
+        throw error;
+    }
 });
