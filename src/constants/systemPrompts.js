@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 01:49:48
+﻿// Last Updated: 2026-01-03 01:53:17
 export const getSystemInstruction = ({
     currentDateInfo,
     todayShift,

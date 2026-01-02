@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 01:49:48
+﻿// Last Updated: 2026-01-03 01:53:17
 import React from 'react';
 import { Settings, X, Calendar as CalendarIcon, Wallet, Heart, BookOpen, Briefcase } from 'lucide-react';
 

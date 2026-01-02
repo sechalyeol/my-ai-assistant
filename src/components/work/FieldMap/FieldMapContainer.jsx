@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 01:49:48
+﻿// Last Updated: 2026-01-03 01:53:17
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
@@ -10,7 +10,7 @@ import {
 import * as THREE from 'three';
 
 import EquipmentDetailModal from '../../modals/EquipmentDetailModal'; // 👈 새로 만든 모달 import
-import equipmentData from "@/data/equipments.json";
+import equipmentData from "../../../../equipments.json";
 
 
 // 🌟 [New] 실행 취소/다시 실행을 위한 커스텀 훅
@@ -1283,10 +1283,35 @@ const FieldMapContainer = ({ workData }) => {
     const [selectedDetailItem, setSelectedDetailItem] = useState(null);
     const [matchedEquipmentInfo, setMatchedEquipmentInfo] = useState(null);
 
-    const findEquipmentInfo = (id) => {
-        // 데이터가 로드되지 않았을 때를 대비해 빈 배열([]) 처리
-        return (equipmentData || []).find(target => target.id === id);
-    }
+    // 🌟 [추가] 설비 정보 매칭 함수
+    const findEquipmentInfo = (mapItem) => {
+        // 1. 라벨 이름으로 매칭 시도
+        let matched = equipmentData.list.find(eq =>
+            mapItem.label && eq.title && mapItem.label.includes(eq.title)
+        );
+
+        // 2. 매칭 실패 시 타입 기반 매칭 (예시)
+        if (!matched && mapItem.type) {
+            if (mapItem.type.includes('PUMP')) matched = equipmentData.list.find(eq => eq.title.includes('Pump'));
+            if (mapItem.type.includes('VALVE')) matched = equipmentData.list.find(eq => eq.title.includes('Valve'));
+        }
+
+        // 3. 관련 가이드(fieldGuides) 찾기
+        const relatedGuides = equipmentData.fieldGuides.filter(guide => {
+            // 카테고리나 제목으로 연관성 찾기
+            if (mapItem.type.includes('VALVE') && guide.category.includes('밸브')) return true;
+            if (mapItem.type.includes('PUMP') && guide.title.includes('Pump')) return true;
+            return false;
+        });
+
+        // 결과 병합
+        return {
+            ...matched,
+            fieldGuides: relatedGuides,
+            // 이미지가 없으면 가이드의 첫번째 이미지 사용
+            image: matched?.image || relatedGuides[0]?.attachments?.[0]?.path
+        };
+    };
 
     const equipmentCategories = useMemo(() => {
         const group = TOOL_HIERARCHY.find(g => g.id === 'EQUIPMENT');
@@ -1796,7 +1821,7 @@ const FieldMapContainer = ({ workData }) => {
 
                                 // 뷰 모드일 때만 상세 모달 열기
                                 if (!editMode) {
-                                    const info = findEquipmentInfo(item.id); // 👈 item.id만 쏙 뽑아서 넘겨주세요
+                                    const info = findEquipmentInfo(item);
                                     setSelectedDetailItem(item);
                                     setMatchedEquipmentInfo(info);
                                     setDetailModalOpen(true);
@@ -1842,9 +1867,8 @@ const FieldMapContainer = ({ workData }) => {
                 <EquipmentDetailModal
                     isOpen={detailModalOpen}
                     onClose={() => setDetailModalOpen(false)}
-                    equipmentId={selectedDetailItem?.id}
-                    initialData={matchedEquipmentInfo}
-                    onSave={(data) => console.log("저장됨:", data)}
+                    item={selectedDetailItem}
+                    matchedInfo={matchedEquipmentInfo}
                 />
             </div>
         </div>
