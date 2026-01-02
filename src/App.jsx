@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-30 15:59:37
+﻿// Last Updated: 2026-01-03 01:49:48
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -23,6 +23,14 @@ import {
 } from './components/widgets/ChatWidgets';
 
 import mapData from './data/mapData.json';
+
+const STRUCTURE_TYPES = [
+  'STAIRS',         // 계단
+  'DOOR',           // 출입문
+  'LADDER',         // 사다리
+  'STEEL_GRATING',  // 그레이팅
+  'FIRE_SHUTTER'    // 방화셔터
+];
 
 
 const { ipcRenderer } = window.require('electron');
@@ -982,12 +990,20 @@ ${contextText.substring(0, 6000)}
 
 const searchEquipmentForChat = (userQuery, mapData) => {
     // 1. 키워드 추출 (3글자 이상 영문/숫자/하이픈)
-    // "7010", "HV-100", "Pump" 등을 잡기 위함
     const match = userQuery.match(/[a-zA-Z0-9-]{3,}/);
     if (!match) return null;
     
-    const keyword = match[0];
-    const allFoundItems = []; // 🌟 모든 층의 결과를 담을 단일 리스트
+    const keyword = match[0]; // 예: "Heater", "Pump"
+    const allFoundItems = [];
+
+    // 🌟 [추가] 검색에서 제외할 구조물 타입 정의
+    const STRUCTURE_TYPES = [
+        'STAIRS',         // 계단
+        'DOOR',           // 출입문
+        'LADDER',         // 사다리
+        'STEEL_GRATING',  // 그레이팅
+        'FIRE_SHUTTER'    // 방화셔터
+    ];
 
     // 2. 데이터 검색
     if (Array.isArray(mapData)) {
@@ -998,21 +1014,40 @@ const searchEquipmentForChat = (userQuery, mapData) => {
                 if (!floor.valves) return;
                 
                 // 해당 층에서 검색어와 일치하는 설비 찾기
-                const matches = floor.valves.filter(item => 
-                    item.label && item.label.includes(keyword)
-                );
+                const matches = floor.valves.filter(item => {
+                    // (1) 라벨 매칭 확인 (기존 로직)
+                    const label = (item.label || '');
+                    if (!label.includes(keyword)) return false;
+
+                    // 🌟 (2) [수정 로직] 구조물 필터링 추가
+                    const isStructure = STRUCTURE_TYPES.some(type => item.type.includes(type));
+
+                    if (isStructure) {
+                        // 구조물이라면, 사용자의 질문(userQuery)에 명시적인 단어가 있는지 확인
+                        const query = userQuery.toLowerCase(); // 소문자로 통일해서 비교
+                        
+                        const isExplicitSearch = 
+                            (query.includes('계단') && item.type.includes('STAIRS')) ||
+                            (query.includes('문') || query.includes('door')) && (item.type.includes('DOOR') || item.type.includes('SHUTTER')) ||
+                            (query.includes('사다리') || query.includes('ladder')) && item.type.includes('LADDER') ||
+                            (query.includes('그레이팅') || query.includes('발판')) && item.type.includes('STEEL_GRATING');
+
+                        // 질문에 "계단" 등이 없는데 구조물이 걸렸다면 -> 제외 (return false)
+                        if (!isExplicitSearch) return false;
+                    }
+
+                    // 필터링을 통과한 경우 (설비이거나, 명시적으로 검색한 구조물인 경우)
+                    return true;
+                });
 
                 // 찾은 설비들을 전체 리스트에 추가
                 if (matches.length > 0) {
                     matches.forEach(item => {
                         allFoundItems.push({
                             ...item,
-                            // 좌표 숫자 변환 (안전을 위해)
                             x: Number(item.x),
                             y: Number(item.y) || 0,
                             z: Number(item.z),
-                            
-                            // 🌟 [핵심] 위젯이 바로 알 수 있게 건물/층 정보를 주입
                             buildingName: building.name || building.id,
                             floorName: floor.label || floor.id,
                             floorId: floor.id
@@ -1023,14 +1058,13 @@ const searchEquipmentForChat = (userQuery, mapData) => {
         });
     }
 
-    // 검색 결과가 없으면 null 반환 (일반 대화로 넘어감)
     if (allFoundItems.length === 0) return null;
 
-    // 3. 전체 결과 반환
     return {
-        type: 'equipment', // App.jsx에서 처리할 메시지 타입
+        type: 'equipment',
         keyword: keyword,
-        foundItems: allFoundItems // 🌟 [0]번만 보내지 않고 전체 리스트 전송
+        foundItems: allFoundItems
     };
 };
+
 export default App;

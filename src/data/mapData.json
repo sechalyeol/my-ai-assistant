@@ -26,7 +26,7 @@
             "z": 8,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "#1 DH Heater Condensate Pump - B",
             "status": "NORMAL"
           },
           {
@@ -37,7 +37,7 @@
             "z": 0,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "#1 DH Heater Condensate Pump - A",
             "status": "NORMAL"
           },
           {
@@ -48,7 +48,7 @@
             "z": -8,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "#3 DH Heater Condensate Pump - B",
             "status": "NORMAL"
           },
           {
@@ -59,7 +59,7 @@
             "z": -15,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "#3 DH Heater Condensate Pump - A",
             "status": "NORMAL"
           },
           {
@@ -111,10 +111,10 @@
             "type": "PUMP_HORIZ",
             "x": -6,
             "y": 0,
-            "z": 22,
+            "z": 22.5,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "Condensate Drain Pump - A",
             "status": "NORMAL"
           },
           {
@@ -125,7 +125,7 @@
             "z": 18,
             "rotation": 0,
             "scale": 1,
-            "label": "New PUMP",
+            "label": "Condensate Drain Pump - B",
             "status": "NORMAL"
           },
           {
@@ -157,8 +157,8 @@
             "y": 0,
             "z": -25,
             "rotation": 0,
-            "scale": 1,
-            "label": "New PUMP",
+            "scale": 0.5,
+            "label": "ST Oily Sump Pump - A",
             "status": "NORMAL"
           },
           {
@@ -168,19 +168,19 @@
             "y": 0,
             "z": -25,
             "rotation": 0,
-            "scale": 1,
-            "label": "New PUMP",
+            "scale": 0.5,
+            "label": "ST Oily Sump Pump - B",
             "status": "NORMAL"
           },
           {
             "id": 1767069341442,
             "type": "VALVE_MOV",
-            "x": 8,
+            "x": 7,
             "y": 0,
-            "z": 7.5,
+            "z": 8.5,
             "rotation": 0,
             "scale": 1,
-            "label": "",
+            "label": "FV-7015",
             "status": "NORMAL"
           },
           {
@@ -191,7 +191,7 @@
             "z": 0,
             "rotation": 0,
             "scale": 1,
-            "label": "New Item (Copy)",
+            "label": "FV-7014",
             "status": "NORMAL"
           },
           {
@@ -202,7 +202,7 @@
             "z": -8,
             "rotation": 0,
             "scale": 1,
-            "label": "New Item (Copy) (Copy)",
+            "label": "FV-7013",
             "status": "NORMAL"
           },
           {
@@ -213,7 +213,73 @@
             "z": -15,
             "rotation": 0,
             "scale": 1,
-            "label": "New Item (Copy) (Copy) (Copy)",
+            "label": "FV-7012",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767370946323,
+            "type": "LCP",
+            "x": -7,
+            "y": 0,
+            "z": -29,
+            "rotation": 0,
+            "scale": 2.5,
+            "label": "ST Building Area Oily Sump Pump",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767371079467,
+            "type": "PUMP_VERT",
+            "x": 6.5,
+            "y": 0,
+            "z": 24.5,
+            "rotation": 0,
+            "scale": 0.5,
+            "label": "ST Building Area Chemical Sump Pump - B",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767371099556,
+            "type": "PUMP_VERT",
+            "x": 10,
+            "y": 0,
+            "z": 24.5,
+            "rotation": 0,
+            "scale": 0.5,
+            "label": "ST Building Area Chemical Sump Pump - A",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767371109551,
+            "type": "LCP",
+            "x": 15,
+            "y": 0,
+            "z": 20,
+            "rotation": -1.5707963267948966,
+            "scale": 2,
+            "label": "ST Building Area Chemical Sump Pump",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767371139496,
+            "type": "VALVE_MOV",
+            "x": 0.5,
+            "y": 0,
+            "z": 29,
+            "rotation": 0,
+            "scale": 1,
+            "label": "HV-7001",
+            "status": "NORMAL"
+          },
+          {
+            "id": 1767371147925,
+            "type": "VALVE_MOV",
+            "x": -5,
+            "y": 0,
+            "z": 29,
+            "rotation": 0,
+            "scale": 1,
+            "label": "HV-7000",
             "status": "NORMAL"
           }
         ]

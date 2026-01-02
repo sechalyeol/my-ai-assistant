@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-30 15:59:37
+﻿// Last Updated: 2026-01-03 01:49:48
 import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, X, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import TodoModal from '../components/modals/TodoModal'; // 1단계에서 만든 모달 import

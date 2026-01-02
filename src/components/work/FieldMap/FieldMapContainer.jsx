@@ -1,4 +1,4 @@
-﻿// Last Updated: 2025-12-30 15:59:37
+﻿// Last Updated: 2026-01-03 01:49:48
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
@@ -8,6 +8,10 @@ import {
     Trash2, Plus, Building, Layers, Check, Eye, MapPin, Box
 } from 'lucide-react';
 import * as THREE from 'three';
+
+import EquipmentDetailModal from '../../modals/EquipmentDetailModal'; // 👈 새로 만든 모달 import
+import equipmentData from "@/data/equipments.json";
+
 
 // 🌟 [New] 실행 취소/다시 실행을 위한 커스텀 훅
 const useUndoRedo = (initialState) => {
@@ -141,8 +145,11 @@ const Label = ({ text, selected, hovered, height, forceShow }) => {
 };
 
 // 🌟 라벨 필터 패널
-const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
+const LabelFilterPanel = ({ categories, visibleState, onToggle, onToggleAll }) => {
     const [isOpen, setIsOpen] = useState(true);
+
+    // 모든 카테고리가 켜져 있는지 확인
+    const isAllSelected = categories.length > 0 && categories.every(cat => visibleState[cat]);
 
     return (
         <div className="absolute top-4 left-4 z-20 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg flex flex-col w-48 transition-all animate-fade-in-left">
@@ -159,6 +166,22 @@ const LabelFilterPanel = ({ categories, visibleState, onToggle }) => {
 
             {isOpen && (
                 <div className="p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                    {/* 🌟 [추가] 전체 보기 버튼 */}
+                    <button
+                        onClick={() => onToggleAll(!isAllSelected)}
+                        className={`flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs transition-colors mb-1 pb-2 border-b border-zinc-100 dark:border-zinc-800
+                            ${isAllSelected
+                                ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium'
+                                : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                    >
+                        <div className={`w-3 h-3 rounded border flex items-center justify-center transition-colors
+                            ${isAllSelected ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-300 dark:border-zinc-600'}`}>
+                            {isAllSelected && <Check size={10} className="text-white" />}
+                        </div>
+                        전체 보기
+                    </button>
+
+                    {/* 기존 개별 카테고리 버튼들 */}
                     {categories.map(cat => (
                         <button
                             key={cat}
@@ -283,7 +306,7 @@ const InteractiveObject = ({ Component, itemId, isEditMode, interactionMode, onU
 };
 
 // --- 3D 모델 컴포넌트들 ---
-const LocalControlPanel = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
+export const LocalControlPanel = ({ position, rotation, label, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
     const width = 1.0;
     const height = 1.8;
     const depth = 0.4;
@@ -348,7 +371,7 @@ const LocalControlPanel = ({ position, rotation, label, onClick, isSelected, isH
     );
 };
 
-const SteelGrating = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
+export const SteelGrating = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
     const texture = useMemo(() => {
         const c = document.createElement('canvas'); c.width = 64; c.height = 64;
         const ctx = c.getContext('2d'); ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0, 0, 64, 64);
@@ -371,7 +394,7 @@ const SteelGrating = ({ position, rotation, onClick, isSelected, isHovered, onHo
     );
 };
 
-const PneumaticButterflyValve = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const PneumaticButterflyValve = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const bodyColor = "#94a3b8";
     const discColor = "#334155";
     const actuatorColor = "#f59e0b";
@@ -416,7 +439,7 @@ const PneumaticButterflyValve = ({ position, rotation, type, scale = 1, label, o
 };
 
 // 🌟 [Cleaned] ValvePin (불필요한 수동/버터플라이 로직 제거)
-const ValvePin = ({ position, rotation, type, label, status, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
+export const ValvePin = ({ position, rotation, type, label, status, onClick, isSelected, isHovered, onHoverChange, scale = 1, showLabel, ...props }) => {
     // 타입 판별
     const isMOV = type === 'VALVE_MOV';
     const isMultiSpring = type === 'VALVE_MULTI_SPRING';
@@ -550,7 +573,7 @@ const ValvePin = ({ position, rotation, type, label, status, onClick, isSelected
 };
 
 // 3. 사다리 (라벨 제거)
-const VerticalLadder = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
+export const VerticalLadder = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, scale = 1, ...props }) => {
     const HEIGHT = 5; const WIDTH = 0.8; const STEPS = 15; const RUNG_SPACING = HEIGHT / STEPS;
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
@@ -572,7 +595,7 @@ const VerticalLadder = ({ position, rotation, onClick, isSelected, isHovered, on
 };
 
 // 3. 계단 (오류 발생했던 부분 -> 라벨 제거 완료)
-const Stairs = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+export const Stairs = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const STEPS = 12; const WIDTH = 3; const STEP_HEIGHT = 0.5; const STEP_DEPTH = 0.8; const LANDING_STEP = 6;
     const steps = useMemo(() => {
         const items = []; let currentY = 0; let currentZ = 0;
@@ -596,7 +619,7 @@ const Stairs = ({ position, rotation, onClick, isSelected, isHovered, onHoverCha
 };
 
 // 4. 출입문 (라벨 제거 완료)
-const SecurityDoor = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+export const SecurityDoor = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const WIDTH = 4.0; const HEIGHT = 6.0; const THICKNESS = 0.25; const FRAME_THICK = 0.4;
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
@@ -619,7 +642,7 @@ const SecurityDoor = ({ position, rotation, onClick, isSelected, isHovered, onHo
 };
 
 // 5. 방화셔터 (라벨 제거 완료)
-const FireShutter = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
+export const FireShutter = ({ position, rotation, onClick, isSelected, isHovered, onHoverChange, ...props }) => {
     const OPEN_W = 12.0; const OPEN_H = 10.0; const BOX_H = 1.5; const RAIL_W = 0.8; const DEPTH = 1.0;
     const shutterTexture = useMemo(() => {
         const c = document.createElement('canvas'); c.width = 128; c.height = 128; const ctx = c.getContext('2d');
@@ -640,7 +663,7 @@ const FireShutter = ({ position, rotation, onClick, isSelected, isHovered, onHov
     );
 };
 
-const IndustrialPump = ({ position, rotation, type, scale = 1, label, status, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const IndustrialPump = ({ position, rotation, type, scale = 1, label, status, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const isVertical = type === 'PUMP_VERTICAL' || type === 'PUMP_VERT';
     const pumpColor = status === 'WARNING' ? '#ef4444' : (isSelected ? '#4f46e5' : '#3b82f6');
     const motorColor = "#64748b";
@@ -699,7 +722,7 @@ const IndustrialPump = ({ position, rotation, type, scale = 1, label, status, on
     );
 };
 
-const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const isPlate = type === 'HX_PLATE'; const metal = "#94a3b8"; const frameColor = "#0f172a";
     return (
         <group position={position} rotation={[0, rotation || 0, 0]} scale={[scale, scale, scale]} onClick={onClick} onPointerOver={(e) => { e.stopPropagation(); onHoverChange(true); }} onPointerOut={(e) => { e.stopPropagation(); onHoverChange(false); }} {...props}>
@@ -734,7 +757,7 @@ const HeatExchanger = ({ position, rotation, type, scale = 1, label, onClick, is
     );
 };
 
-const DrainCooler = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const DrainCooler = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const shellColor = "#94a3b8";
     const nozzleColor = "#64748b";
     const saddleColor = "#334155";
@@ -780,7 +803,7 @@ const DrainCooler = ({ position, rotation, type, scale = 1, label, onClick, isSe
     );
 };
 
-const GeneratorBusSystem = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const GeneratorBusSystem = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const pipeColor = "#e5e7eb";
     const bellowsColor = "#1f2937";
     const cabinetColor = "#f8fafc";
@@ -860,7 +883,7 @@ const GeneratorBusSystem = ({ position, rotation, type, scale = 1, label, onClic
     );
 };
 
-const StorageTank = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const StorageTank = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const isSquare = type === 'TANK_SQUARE';
     const bodyColor = "#cbd5e1";
     const ribColor = "#64748b";
@@ -943,7 +966,7 @@ const StorageTank = ({ position, rotation, type, scale = 1, label, onClick, isSe
     );
 };
 
-const IndustrialFan = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const IndustrialFan = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const housingColor = "#334155";
     const motorColor = "#475569";
     const baseColor = "#1e293b";
@@ -970,7 +993,7 @@ const IndustrialFan = ({ position, rotation, type, scale = 1, label, onClick, is
     );
 };
 
-const DifferentialFilter = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
+export const DifferentialFilter = ({ position, rotation, type, scale = 1, label, onClick, isSelected, isHovered, onHoverChange, showLabel, ...props }) => {
     const housingColor = "#cbd5e1";
     const pipeColor = "#94a3b8";
     const valveColor = "#334155";
@@ -1029,14 +1052,23 @@ const DifferentialFilter = ({ position, rotation, type, scale = 1, label, onClic
 };
 
 
-const FloorPlane = ({ onFloorClick, editMode, isDark }) => {
+// 🌟 [수정] export 추가 + gridColors Prop 추가 (기본값은 기존 로직 유지)
+export const FloorPlane = ({ onFloorClick, editMode, isDark, gridColors }) => {
     const [texture, setTexture] = useState(null);
+
+    // ... (useEffect 등 기존 로직 유지) ...
     useEffect(() => {
         new THREE.TextureLoader().load('/floor_plan.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; setTexture(t); }, undefined, () => setTexture(null));
     }, []);
+
     const floorColor = isDark ? "#0f172a" : "#64748b";
-    const gridColor1 = isDark ? "#1e293b" : "#94a3b8";
-    const gridColor2 = isDark ? "#334155" : "#cbd5e1";
+
+    // 🌟 [수정] 외부에서 gridColors가 들어오면 그걸 쓰고, 아니면 기존 로직(다크모드 여부) 사용
+    const defaultGrid1 = isDark ? "#1e293b" : "#94a3b8";
+    const defaultGrid2 = isDark ? "#334155" : "#cbd5e1";
+
+    const finalGrid1 = gridColors?.primary || defaultGrid1;
+    const finalGrid2 = gridColors?.secondary || defaultGrid2;
 
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow onClick={(e) => { if (!editMode || e.button !== 0 || e.delta > 2) return; e.stopPropagation(); onFloorClick(e.point); }}>
@@ -1047,7 +1079,11 @@ const FloorPlane = ({ onFloorClick, editMode, isDark }) => {
                 <meshStandardMaterial color={floorColor} transparent opacity={0.6} roughness={0.8} metalness={0.1} />
             )}
 
-            <gridHelper args={[100, 20, gridColor1, gridColor2]} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} />
+            <gridHelper
+                args={[100, 20, finalGrid1, finalGrid2]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[0, 0.01, 0]}
+            />
         </mesh>
     );
 };
@@ -1243,13 +1279,28 @@ const FieldMapContainer = ({ workData }) => {
 
     const [allFloorData, setAllFloorData, undo, redo] = useUndoRedo({});
 
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
+    const [selectedDetailItem, setSelectedDetailItem] = useState(null);
+    const [matchedEquipmentInfo, setMatchedEquipmentInfo] = useState(null);
+
+    const findEquipmentInfo = (id) => {
+        // 데이터가 로드되지 않았을 때를 대비해 빈 배열([]) 처리
+        return (equipmentData || []).find(target => target.id === id);
+    }
+
     const equipmentCategories = useMemo(() => {
         const group = TOOL_HIERARCHY.find(g => g.id === 'EQUIPMENT');
         return group ? group.children.map(c => c.label) : [];
     }, []);
 
-    const [visibleLabels, setVisibleLabels] = useState({});
-
+    const [visibleLabels, setVisibleLabels] = useState({ '밸브': true });
+    const toggleAllLabels = (shouldSelectAll) => {
+        const newState = {};
+        equipmentCategories.forEach(cat => {
+            newState[cat] = shouldSelectAll;
+        });
+        setVisibleLabels(newState);
+    };
     // 🌟 [New] 검색 결과 관리를 위한 상태
     const [searchResults, setSearchResults] = useState([]); // 검색된 설비 목록 ({id, label, building, floor...})
     const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(false); // 검색 결과 패널 표시 여부
@@ -1688,6 +1739,7 @@ const FieldMapContainer = ({ workData }) => {
                     categories={equipmentCategories}
                     visibleState={visibleLabels}
                     onToggle={toggleLabelVisibility}
+                    onToggleAll={toggleAllLabels}
                 />
                 {editMode && selectedId && selectedItem && interactionMode === 'PROP' && (
                     <PropertyPanel item={selectedItem} onUpdate={handleUpdateProps} onDelete={handleDeleteItem} onClose={() => setSelectedId(null)} />
@@ -1738,7 +1790,18 @@ const FieldMapContainer = ({ workData }) => {
                             onUpdate: handleUpdateItem,
                             onDragStart: handleDragStart,
                             onDragEnd: handleDragEnd,
-                            onClick: (e) => { e.stopPropagation(); setSelectedId(item.id); }
+                            onClick: (e) => {
+                                e.stopPropagation();
+                                setSelectedId(item.id); // 기존 하이라이트 기능 유지
+
+                                // 뷰 모드일 때만 상세 모달 열기
+                                if (!editMode) {
+                                    const info = findEquipmentInfo(item.id); // 👈 item.id만 쏙 뽑아서 넘겨주세요
+                                    setSelectedDetailItem(item);
+                                    setMatchedEquipmentInfo(info);
+                                    setDetailModalOpen(true);
+                                }
+                            }
                         };
 
                         if (item.type === 'VALVE_BUTTERFLY_PNEUMATIC') {
@@ -1776,6 +1839,13 @@ const FieldMapContainer = ({ workData }) => {
                     })}
                     <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={60} blur={2} far={4} />
                 </Canvas>
+                <EquipmentDetailModal
+                    isOpen={detailModalOpen}
+                    onClose={() => setDetailModalOpen(false)}
+                    equipmentId={selectedDetailItem?.id}
+                    initialData={matchedEquipmentInfo}
+                    onSave={(data) => console.log("저장됨:", data)}
+                />
             </div>
         </div>
     );

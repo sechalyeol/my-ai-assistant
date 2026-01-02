@@ -1,16 +1,16 @@
-﻿// Last Updated: 2025-12-30 15:59:37
+﻿// Last Updated: 2026-01-03 01:49:48
 import React, { useState, useMemo } from 'react';
-import { 
-    Calendar as CalendarIcon, 
-    Wallet, 
-    Heart, 
-    BookOpen, 
-    ChevronLeft, 
-    ChevronRight, 
-    Menu, 
-    Link as LinkIcon, 
+import {
+    Calendar as CalendarIcon,
+    Wallet,
+    Heart,
+    BookOpen,
+    ChevronLeft,
+    ChevronRight,
+    Menu,
+    Link as LinkIcon,
     ExternalLink,
-    MapPin, 
+    MapPin,
     Box,
     Map as MapIcon,
     List,
@@ -18,13 +18,32 @@ import {
 } from 'lucide-react';
 
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Html, Center, Float } from '@react-three/drei';
+import { OrbitControls, Html, Center, Float, ContactShadows, Environment } from '@react-three/drei';
 import * as THREE from 'three';
 
 import mapData from '../../data/mapData.json';
 
+import {
+    PneumaticButterflyValve,
+    GeneratorBusSystem,
+    DrainCooler,
+    FireShutter,
+    ValvePin,
+    LocalControlPanel,
+    IndustrialPump,
+    HeatExchanger,
+    StorageTank,
+    IndustrialFan,
+    DifferentialFilter,
+    Stairs,
+    SecurityDoor,
+    VerticalLadder,
+    SteelGrating,
+    FloorPlane
+} from '../work/FieldMap/FieldMapContainer';
+
 // ----------------------------------------------------------------------
-// 1. 설비 채팅 위젯 (개선됨: 리스트 -> 맵 상세 보기)
+// 1. 설비 채팅 위젯 (개선됨: 리스트 -> 맵 상세 보기 + 리얼 3D 모델)
 // ----------------------------------------------------------------------
 export const EquipmentChatWidget = ({ data }) => {
     // data.foundItems: 검색된 설비 목록
@@ -35,7 +54,6 @@ export const EquipmentChatWidget = ({ data }) => {
     const mapContext = useMemo(() => {
         if (!selectedItem) return null;
 
-        // mapData 전체를 뒤져서 해당 아이템이 있는 층(Floor) 데이터를 찾습니다.
         for (const b of mapData) {
             for (const f of b.floors) {
                 const target = (f.valves || []).find(v => v.id === selectedItem.id);
@@ -43,7 +61,7 @@ export const EquipmentChatWidget = ({ data }) => {
                     return {
                         buildingName: b.name,
                         floorName: f.label,
-                        allItems: f.valves, // 그 층의 모든 설비 (배경용)
+                        allItems: f.valves,
                         targetItem: target
                     };
                 }
@@ -52,79 +70,66 @@ export const EquipmentChatWidget = ({ data }) => {
         return null;
     }, [selectedItem]);
 
-    // 📦 3D 객체 렌더러 (고스트 모드)
-    const GhostObject = ({ item, isTarget }) => {
-        const color = isTarget ? "#ef4444" : "#94a3b8"; // 타겟: 빨강, 나머지: 회색
-        const opacity = isTarget ? 1.0 : 0.2;           // 타겟: 선명, 나머지: 흐릿
-        const scale = isTarget ? 1.5 : 1.0;             // 타겟: 좀 더 크게
+    // 🌟 [수정 2] 실제 모델을 렌더링하는 컴포넌트
+    const RealModelRenderer = ({ item, isTarget }) => {
+        // 공통 Props 설정
+        const commonProps = {
+            position: [item.x, item.y || 0, item.z],
+            rotation: item.rotation || 0,
+            scale: item.scale || 1,
+            label: item.label,
+            isSelected: isTarget, // 타겟이면 선택된 상태(색상 등)로 표시
+            isHovered: false,
+            showLabel: isTarget, // 타겟만 라벨 표시
+            onClick: () => { },
+            onHoverChange: () => { },
+            // 그림자 처리를 위한 설정 (필요시)
+            castShadow: true,
+            receiveShadow: true
+        };
 
-        // 타입별 대략적인 모양
-        let Geometry = <boxGeometry args={[1, 1, 1]} />;
-        let yOffset = 0.5;
+        // 타입에 따른 컴포넌트 매핑 (FieldMapContainer 로직과 동일)
+        if (item.type === 'VALVE_BUTTERFLY_PNEUMATIC') return <PneumaticButterflyValve {...commonProps} />;
+        if (item.type === 'ELEC_GCB_SYSTEM') return <GeneratorBusSystem {...commonProps} />;
+        if (item.type === 'HX_DRAIN_COOLER') return <DrainCooler {...commonProps} />;
+        if (item.type === 'FIRE_SHUTTER') return <FireShutter {...commonProps} />;
 
-        if (item.type.includes('TANK')) {
-            Geometry = <cylinderGeometry args={[1.2, 1.2, 3, 16]} />;
-            yOffset = 1.5;
-        } else if (item.type.includes('PUMP')) {
-            Geometry = <boxGeometry args={[2, 0.8, 0.8]} />;
-            yOffset = 0.4;
-        } else if (item.type.includes('STAIRS')) {
-            Geometry = <boxGeometry args={[2, 4, 1]} />;
-            yOffset = 2;
-        } else if (item.type.includes('VALVE')) {
-            Geometry = <sphereGeometry args={[0.4, 16, 16]} />;
-            yOffset = 0.4;
-        } else if (item.type.includes('DOOR') || item.type.includes('SHUTTER')) {
-             Geometry = <boxGeometry args={[3, 3, 0.2]} />;
-             yOffset = 1.5;
+        if (['VALVE_MOV', 'VALVE_MULTI_SPRING', 'VALVE_DOUBLE_ACTING', 'VALVE_HYDRAULIC'].includes(item.type)) {
+            return <ValvePin {...commonProps} type={item.type} />;
         }
+        if (item.type === 'LCP') return <LocalControlPanel {...commonProps} />;
+        if (item.type.includes('PUMP')) {
+            return <IndustrialPump {...commonProps} type={item.type === 'PUMP_VERT' ? 'PUMP_VERTICAL' : 'PUMP_HORIZONTAL'} />;
+        }
+        if (item.type.includes('HX')) return <HeatExchanger {...commonProps} type={item.type} />;
+        if (['TANK_VERTICAL', 'TANK_SQUARE'].includes(item.type)) {
+            return <StorageTank {...commonProps} type={item.type} />;
+        }
+        if (item.type === 'FAN_CENTRIFUGAL') return <IndustrialFan {...commonProps} />;
+        if (item.type === 'FILTER_DP') return <DifferentialFilter {...commonProps} />;
 
+        if (item.type.includes('STAIRS')) return <Stairs {...commonProps} />;
+        if (item.type === 'DOOR') return <SecurityDoor {...commonProps} />;
+        if (item.type === 'LADDER') return <VerticalLadder {...commonProps} />;
+        if (item.type === 'STEEL_GRATING') return <SteelGrating {...commonProps} />;
+
+        // 매칭되는 타입이 없으면 기본 박스 (Fallback)
         return (
-            <group 
-                position={[item.x, item.y || 0, item.z]} 
-                rotation={[0, item.rotation || 0, 0]} 
-                scale={[scale, scale, scale]}
-            >
-                {/* 본체 */}
-                <mesh position={[0, yOffset, 0]}>
-                    {Geometry}
-                    <meshStandardMaterial color={color} transparent opacity={opacity} />
-                </mesh>
-                
-                {/* 타겟 마커 및 라벨 */}
-                {isTarget && (
-                    <>
-                        {/* 둥둥 떠있는 화살표 */}
-                        <Float speed={2} rotationIntensity={0} floatIntensity={0.5}>
-                            <mesh position={[0, yOffset + 2.5, 0]} rotation={[Math.PI, 0, 0]}>
-                                <coneGeometry args={[0.4, 0.8, 8]} />
-                                <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
-                            </mesh>
-                        </Float>
-                        {/* 텍스트 라벨 */}
-                        <Html position={[0, yOffset + 3.2, 0]} center zIndexRange={[100, 0]}>
-                            <div className="flex flex-col items-center">
-                                <div className="px-2.5 py-1 bg-red-600 text-white text-[11px] font-bold rounded-lg shadow-xl whitespace-nowrap border border-white/20">
-                                    {item.label}
-                                </div>
-                                <div className="w-0.5 h-2 bg-red-600"></div>
-                            </div>
-                        </Html>
-                    </>
-                )}
-            </group>
+            <mesh position={commonProps.position} scale={[0.5, 0.5, 0.5]}>
+                <boxGeometry />
+                <meshStandardMaterial color="#94a3b8" />
+            </mesh>
         );
     };
 
     return (
         <div className="w-80 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl overflow-hidden shadow-lg transition-all duration-300">
-            
-            {/* 1. 지도 보기 모드 */}
+
             {selectedItem && mapContext ? (
                 <div className="flex flex-col h-full animate-fade-in">
                     {/* 상단 네비게이션 */}
                     <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/50">
-                        <button 
+                        <button
                             onClick={() => setSelectedItem(null)}
                             className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors bg-white dark:bg-zinc-700 px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600"
                         >
@@ -140,26 +145,42 @@ export const EquipmentChatWidget = ({ data }) => {
 
                     {/* 3D 캔버스 영역 */}
                     <div className="h-64 relative bg-gradient-to-b from-zinc-100 to-zinc-200 dark:from-zinc-900 dark:to-black">
-                        <Canvas camera={{ position: [mapContext.targetItem.x + 8, 12, mapContext.targetItem.z + 8], fov: 40 }}>
-                            <ambientLight intensity={0.6} />
+                        <Canvas
+                            shadows
+                            camera={{ position: [mapContext.targetItem.x + 6, 8, mapContext.targetItem.z + 6], fov: 45 }}
+                        >
+                            {/* 조명 및 환경 설정 */}
+                            <ambientLight intensity={0.5} />
                             <directionalLight position={[10, 20, 5]} intensity={1.2} castShadow />
-                            <OrbitControls 
-                                target={[mapContext.targetItem.x, 0, mapContext.targetItem.z]} 
+                            <Environment preset="city" />
+
+                            <OrbitControls
+                                target={[mapContext.targetItem.x, 0, mapContext.targetItem.z]}
                                 maxPolarAngle={Math.PI / 2.1}
                                 autoRotate={true}
-                                autoRotateSpeed={0.5}
+                                autoRotateSpeed={1.0}
                             />
-                            
-                            <gridHelper args={[100, 20, "#cbd5e1", "#334155"]} position={[0, -0.01, 0]} />
-                            
-                            {/* 🌟 주변 설비 모두 렌더링 */}
+                            {/* 🌟 [수정] 기존 gridHelper 제거하고 FloorPlane 사용 */}
+                            {/* 소형 위젯용 연한 격자 색상 전달 */}
+                            <FloorPlane
+                                isDark={false} // 또는 상위에서 다크모드 상태를 받아와서 연결
+                                editMode={false} // 뷰어 전용이므로 편집 모드 끔
+                                gridColors={{
+                                    primary: "#e2e8f0",   // 아주 연한 회색 (주 격자)
+                                    secondary: "#f1f5f9"  // 거의 보이지 않는 회색 (보조 격자)
+                                }}
+                            />
+                            {/* 🌟 주변 설비 모두 리얼 모델로 렌더링 */}
                             {mapContext.allItems.map((item, idx) => (
-                                <GhostObject 
-                                    key={item.id || idx} 
-                                    item={item} 
-                                    isTarget={item.id === selectedItem.id} 
+                                <RealModelRenderer
+                                    key={item.id || idx}
+                                    item={item}
+                                    isTarget={item.id === selectedItem.id}
                                 />
                             ))}
+
+                            {/* 그림자 효과 */}
+                            <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={40} blur={2} far={4} />
                         </Canvas>
 
                         {/* 하단 범례 */}
@@ -167,7 +188,7 @@ export const EquipmentChatWidget = ({ data }) => {
                             <div className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
                                 <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 mb-1">{selectedItem.label}</p>
                                 <p className="text-[10px] text-zinc-500 flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> 선택됨
+                                    <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span> 선택됨
                                     <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block ml-2"></span> 주변 설비
                                 </p>
                             </div>
@@ -175,7 +196,7 @@ export const EquipmentChatWidget = ({ data }) => {
                     </div>
                 </div>
             ) : (
-                /* 2. 검색 결과 리스트 모드 */
+                /* 2. 검색 결과 리스트 모드 (기존 유지) */
                 <div className="p-4">
                     <div className="flex items-center gap-2 mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
                         <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
@@ -192,19 +213,18 @@ export const EquipmentChatWidget = ({ data }) => {
                     <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-700 pr-1">
                         {foundItems.length > 0 ? (
                             foundItems.map((item) => {
-                                // 리스트에서도 위치 정보 미리 보여주기 위해 mapData 검색
                                 let locationText = "위치 정보 없음";
-                                for(const b of mapData) {
-                                    for(const f of b.floors) {
-                                        if((f.valves||[]).some(v => v.id === item.id)) {
+                                for (const b of mapData) {
+                                    for (const f of b.floors) {
+                                        if ((f.valves || []).some(v => v.id === item.id)) {
                                             locationText = `${b.name} ${f.label}`;
                                         }
                                     }
                                 }
 
                                 return (
-                                    <div 
-                                        key={item.id} 
+                                    <div
+                                        key={item.id}
                                         className="group p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/30 hover:bg-white dark:hover:bg-zinc-800 hover:border-indigo-200 dark:hover:border-indigo-700/50 hover:shadow-md transition-all cursor-pointer flex items-center justify-between"
                                         onClick={() => setSelectedItem(item)}
                                     >
@@ -221,8 +241,11 @@ export const EquipmentChatWidget = ({ data }) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <button className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                                            지도 보기
+                                        <button 
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:scale-110 shadow-sm"
+                                            title="지도에서 보기"
+                                        >
+                                            <MapPin size={14} className="fill-current" />
                                         </button>
                                     </div>
                                 );
@@ -528,28 +551,25 @@ export const CustomDashboardChatWidget = ({ data }) => {
 
     return (
         <div className="w-80 flex flex-col gap-4">
-            
+
             {/* 1. 메모/알람 섹션 */}
             {memos.length > 0 && (
                 <div className="space-y-2.5">
                     {memos.map(memo => {
                         const isAlarm = !!memo.targetTime;
                         return (
-                            <div key={memo.id} className={`p-3.5 rounded-2xl border shadow-sm transition-all ${
-                                isAlarm 
-                                ? 'bg-indigo-50/50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800' 
-                                : 'bg-amber-50/50 border-amber-100 dark:bg-amber-900/20 dark:border-amber-800'
-                            }`}>
+                            <div key={memo.id} className={`p-3.5 rounded-2xl border shadow-sm transition-all ${isAlarm
+                                    ? 'bg-indigo-50/50 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800'
+                                    : 'bg-amber-50/50 border-amber-100 dark:bg-amber-900/20 dark:border-amber-800'
+                                }`}>
                                 <div className="flex items-start justify-between mb-2">
                                     <div className="flex items-center gap-2">
-                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${
-                                            isAlarm ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
-                                        }`}>
+                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${isAlarm ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
+                                            }`}>
                                             {isAlarm ? '⏰' : '📌'}
                                         </span>
-                                        <span className={`text-xs font-bold ${
-                                            isAlarm ? 'text-indigo-900 dark:text-indigo-200' : 'text-amber-900 dark:text-amber-200'
-                                        }`}>
+                                        <span className={`text-xs font-bold ${isAlarm ? 'text-indigo-900 dark:text-indigo-200' : 'text-amber-900 dark:text-amber-200'
+                                            }`}>
                                             {memo.title}
                                         </span>
                                     </div>
@@ -576,20 +596,20 @@ export const CustomDashboardChatWidget = ({ data }) => {
                         const iconSrc = link.finalIcon || getFavicon(link.url);
 
                         return (
-                            <a 
-                                key={link.id} 
-                                href={link.url} 
-                                target="_blank" 
-                                rel="noreferrer" 
+                            <a
+                                key={link.id}
+                                href={link.url}
+                                target="_blank"
+                                rel="noreferrer"
                                 className="flex items-center gap-2 p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-400 transition-all group shadow-sm"
                             >
                                 <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-110 transition-transform text-xs">
                                     {iconSrc ? (
-                                        <img 
-                                            src={iconSrc} 
-                                            alt={link.title} 
+                                        <img
+                                            src={iconSrc}
+                                            alt={link.title}
                                             className="w-5 h-5 object-contain"
-                                            onError={(e) => { e.target.parentElement.innerHTML = '🔗'; }} 
+                                            onError={(e) => { e.target.parentElement.innerHTML = '🔗'; }}
                                         />
                                     ) : (
                                         '🔗'
