@@ -1,5 +1,6 @@
-﻿// Last Updated: 2026-01-03 01:53:17
+﻿// Last Updated: 2026-01-03 20:19:58
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { LayoutDashboard, X, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import TodoModal from '../components/modals/TodoModal'; // 1단계에서 만든 모달 import
 import { getEventStyle, GROUP_START_DATES, COMMON_SHIFT_PATTERN } from '../constants'; // 1단계에서 만든 상수 import
@@ -10,8 +11,9 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
     const [calendarMode, setCalendarMode] = useState('month');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedTodo, setSelectedTodo] = useState(null);
-    const [expandedDate, setExpandedDate] = useState(null);
     const [dialogConfig, setDialogConfig] = useState({ isOpen: false, message: '', onConfirm: null });
+
+    const [popupData, setPopupData] = useState(null);
 
     const [draggedTodoId, setDraggedTodoId] = useState(null);
     const [resizingTodo, setResizingTodo] = useState(null);
@@ -97,6 +99,22 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
         setSelectedTodo(null);
     };
 
+    // 🌟 [추가] "더보기" 클릭 시 팝업 열기 핸들러
+    const handleExpandClick = (e, dateStr, dayEvents) => {
+        e.stopPropagation();
+        const rect = e.target.getBoundingClientRect();
+
+        // 화면 오른쪽 끝에 너무 가까우면 왼쪽으로 띄우는 로직 등 추가 가능
+        // 여기서는 간단하게 클릭한 요소 근처에 띄움
+        setPopupData({
+            dateStr,
+            events: dayEvents,
+            x: rect.left + window.scrollX,
+            y: rect.bottom + window.scrollY,
+            titleDate: new Date(dateStr).getDate()
+        });
+    };
+
     // 🟢 [수정] 삭제 확인 다이얼로그 띄우기
     // 🟢 [수정] 삭제 확인 다이얼로그 띄우기
     const handleDeleteTodo = (id) => {
@@ -115,7 +133,7 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
                     return newTodos;
                 });
                 setSelectedTodo(null);
-                if (expandedDate) setExpandedDate(null);
+                if (popupData) setPopupData(null);
             }
         });
     };
@@ -389,45 +407,24 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
             const MAX_VISIBLE = 2;
             const visibleEvents = dayEvents.slice(0, MAX_VISIBLE);
             const overflowCount = dayEvents.length - MAX_VISIBLE;
-            const isExpanded = expandedDate === dString;
-            const currentRow = Math.floor((i + offset) / 7);
-            const isBottomRow = currentRow >= 3;
-            const vertPos = isBottomRow ? 'bottom-[105%] mb-1 origin-bottom' : 'top-[105%] mt-1 origin-top';
-            const horizPos = (dayOfWeek === 0 || dayOfWeek === 1) ? 'left-0' : (dayOfWeek === 5 || dayOfWeek === 6) ? 'right-0' : 'left-1/2 -translate-x-1/2 origin-top';
-
+            
             return (
-                <div key={i} className={`relative h-full min-h-0 border rounded-lg p-1.5 flex flex-col justify-start gap-0.5 ${isToday ? 'border-indigo-400 bg-indigo-50/30' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/30'} ${isExpanded ? 'z-50 opacity-100' : 'hover:opacity-100 z-auto'} transition-none`}>
+                <div key={i} className={`relative h-full min-h-0 border rounded-lg p-1.5 flex flex-col justify-start gap-0.5 ${isToday ? 'border-indigo-400 bg-indigo-50/30' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/30'} hover:opacity-100 transition-none`}>
                     <div className={`text-right text-[10px] font-bold mb-0.5 ${dateNumColor}`}>{i + 1}</div>
                     <div className="w-full flex flex-col gap-0.5 overflow-hidden">
                         {visibleEvents.map(t => {
                             const style = getEventStyle(t);
                             return (<div key={t.id} onClick={(e) => { e.stopPropagation(); setSelectedTodo(t); }} className={`text-[9px] px-1 py-0.5 rounded border truncate font-bold cursor-pointer hover:opacity-80 transition-opacity ${style.card}`}>{t.text}</div>);
                         })}
-                        {overflowCount > 0 && (<div onClick={(e) => { e.stopPropagation(); setExpandedDate(dString); }} className="text-[8px] text-center font-bold text-zinc-500 bg-zinc-100 hover:bg-zinc-200 rounded cursor-pointer py-0.5 transition-colors">+{overflowCount}</div>)}
-                    </div>
-                    {isExpanded && (
-                        <>
-                            <div className="fixed inset-0 z-40 bg-transparent cursor-default" onClick={(e) => { e.stopPropagation(); setExpandedDate(null); }} />
-                            <div className={`absolute ${vertPos} ${horizPos} z-50 w-[240px] bg-white dark:bg-zinc-900 rounded-xl shadow-2xl flex flex-col p-3 border border-indigo-100 dark:border-zinc-700 animate-fade-in-up`} onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                                    <div className="flex items-center gap-2"><div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div><span className={`text-sm font-black ${dateNumColor}`}>{i + 1}일 전체 일정</span></div>
-                                    <button onClick={(e) => { e.stopPropagation(); setExpandedDate(null); }} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors"><X size={14} /></button>
-                                </div>
-                                <div className="flex-1 overflow-y-auto max-h-[240px] scrollbar-hide space-y-1">
-                                    {dayEvents.map(t => {
-                                        const style = getEventStyle(t);
-                                        const timeDisplay = t.startTime ? `${t.startTime}` : t.time;
-                                        return (
-                                            <div key={t.id} onClick={(e) => { e.stopPropagation(); setSelectedTodo(t); }} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all hover:translate-x-0.5 ${style.card}`}>
-                                                {timeDisplay ? (<div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.badge}`}>{timeDisplay}</div>) : (<div className="w-1.5 h-1.5 rounded-full bg-current opacity-50 ml-1 mr-1"></div>)}
-                                                <div className="text-xs font-bold truncate flex-1 leading-none pt-0.5">{t.text}</div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                        {overflowCount > 0 && (
+                            <div 
+                                onClick={(e) => handleExpandClick(e, dString, dayEvents)} 
+                                className="text-[8px] text-center font-bold text-zinc-500 bg-zinc-100 hover:bg-zinc-200 rounded cursor-pointer py-0.5 transition-colors"
+                            >
+                                +{overflowCount}
                             </div>
-                        </>
-                    )}
+                        )}
+                    </div>
                 </div>
             );
         });
@@ -435,6 +432,7 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
         const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
         return (
+            <>
             <div className="flex flex-col h-full overflow-hidden">
                 <div className="grid grid-cols-7 gap-1 mb-1 flex-shrink-0">
                     {dayHeaders.map((d, i) => {
@@ -447,6 +445,42 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
                     {dateCells}
                 </div>
             </div>
+        
+    {/* 🌟 [Portal] 월간 뷰 확장 팝업 */}
+                {popupData && createPortal(
+                    <>
+                        <div className="fixed inset-0 z-[9998]" onClick={() => setPopupData(null)} />
+                        <div 
+                            className="fixed z-[9999] w-[240px] bg-white dark:bg-zinc-900 rounded-xl shadow-2xl flex flex-col p-3 border border-indigo-100 dark:border-zinc-700 animate-fade-in-up"
+                            style={{ 
+                                top: Math.min(popupData.y, window.innerHeight - 300), // 화면 아래로 나가지 않게 조정
+                                left: Math.min(popupData.x, window.innerWidth - 250)   // 화면 오른쪽으로 나가지 않게 조정
+                            }}
+                        >
+                            <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                                    <span className="text-sm font-black text-zinc-800 dark:text-zinc-100">{popupData.titleDate}일 전체 일정</span>
+                                </div>
+                                <button onClick={() => setPopupData(null)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 transition-colors"><X size={14} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto max-h-[240px] scrollbar-hide space-y-1">
+                                {popupData.events.map(t => {
+                                    const style = getEventStyle(t);
+                                    const timeDisplay = t.startTime ? `${t.startTime}` : t.time;
+                                    return (
+                                        <div key={t.id} onClick={(e) => { e.stopPropagation(); setSelectedTodo(t); setPopupData(null); }} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all hover:translate-x-0.5 ${style.card}`}>
+                                            {timeDisplay ? (<div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${style.badge}`}>{timeDisplay}</div>) : (<div className="w-1.5 h-1.5 rounded-full bg-current opacity-50 ml-1 mr-1"></div>)}
+                                            <div className="text-xs font-bold truncate flex-1 leading-none pt-0.5">{t.text}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </>,
+                    document.body
+                )}
+            </>
         );
     };
 
@@ -483,17 +517,17 @@ const ScheduleDetailView = ({ todos, setTodos, settings, onGroupChange, getShift
                         <h3 className="font-bold text-lg mb-2 text-zinc-800 dark:text-zinc-100">확인</h3>
                         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6 whitespace-pre-wrap">{dialogConfig.message}</p>
                         <div className="flex gap-2">
-                            <button 
-                                onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })} 
+                            <button
+                                onClick={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
                                 className="flex-1 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                             >
                                 취소
                             </button>
-                            <button 
-                                onClick={() => { 
-                                    if (dialogConfig.onConfirm) dialogConfig.onConfirm(); 
-                                    setDialogConfig({ ...dialogConfig, isOpen: false }); 
-                                }} 
+                            <button
+                                onClick={() => {
+                                    if (dialogConfig.onConfirm) dialogConfig.onConfirm();
+                                    setDialogConfig({ ...dialogConfig, isOpen: false });
+                                }}
                                 className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg"
                             >
                                 네, 삭제할게요

@@ -1,16 +1,16 @@
-﻿// Last Updated: 2026-01-03 01:53:17
+﻿// Last Updated: 2026-01-03 20:19:58
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
 import {
     Database, LayoutTemplate, MousePointer2, Edit3,
     Save, X, Search, ChevronRight, ChevronDown,
-    Trash2, Plus, Building, Layers, Check, Eye, MapPin, Box
+    Trash2, Plus, Building, Layers, Check, Eye, MapPin, Box, Upload
 } from 'lucide-react';
 import * as THREE from 'three';
 
 import EquipmentDetailModal from '../../modals/EquipmentDetailModal'; // 👈 새로 만든 모달 import
-import equipmentData from "../../../../equipments.json";
+import equipmentData from "../../../../equipment.json";
 
 
 // 🌟 [New] 실행 취소/다시 실행을 위한 커스텀 훅
@@ -1088,13 +1088,11 @@ export const FloorPlane = ({ onFloorClick, editMode, isDark, gridColors }) => {
     );
 };
 
-// 🌟 [UI 수정] 베리어블 드롭다운 스타일 적용 + 기존 슬라이더/버튼 UI 복구
+// 🌟 [UI 최적화] 컴팩트해진 속성 편집 패널
 const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
-    // 드롭다운 열림/닫힘 상태 관리
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-    // 외부 클릭 시 드롭다운 닫기 위한 Ref
     const dropdownRef = useRef(null);
+
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -1105,18 +1103,29 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    // 이미지 선택 핸들러 (채널명: select-image 확인)
+    const handleImageSelect = async () => {
+        try {
+            const { ipcRenderer } = window.require('electron');
+            const filePath = await ipcRenderer.invoke('select-image'); // main.cjs와 일치
+            if (filePath) {
+                onUpdate({ ...item, image: filePath });
+            }
+        } catch (error) {
+            console.error("이미지 선택 실패:", error);
+        }
+    };
+
     if (!item) return null;
 
-    // 🛠️ 지능형 목록 로직 (기존 유지)
+    // 설비 타입 옵션 로직 (기존 유지)
     const getVariableTypeOptions = () => {
         for (const group of TOOL_HIERARCHY) {
             if (group.children) {
                 for (const category of group.children) {
-                    // 1. 밸브류 등 서브메뉴가 있는 경우
                     if (category.children && category.children.some(c => c.type === item.type)) {
                         return { label: category.label, options: category.children };
                     }
-                    // 2. 펌프/열교환기 등 접두사로 묶인 경우
                     if (category.type === item.type) {
                         if (item.type.includes('PUMP')) return { label: '펌프 타입 선택', options: group.children.filter(c => c.type && c.type.includes('PUMP')) };
                         if (item.type.includes('HX')) return { label: '열교환기 타입 선택', options: group.children.filter(c => c.type && c.type.includes('HX')) };
@@ -1128,64 +1137,47 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
     };
 
     const { label: groupLabel, options: typeOptions } = getVariableTypeOptions();
-
-    // 현재 선택된 타입의 라벨 찾기
     const currentOptionLabel = typeOptions.find(opt => opt.type === item.type)?.label || item.label;
 
     return (
-        <div className="absolute top-8 right-4 w-72 bg-white/95 dark:bg-zinc-900/95 backdrop-blur shadow-2xl rounded-2xl border border-zinc-200 dark:border-zinc-700 p-5 z-[150] animate-fade-in-right max-h-[85vh] overflow-y-auto custom-scrollbar">
+        <div className="absolute top-16 right-4 w-64 bg-white/95 dark:bg-zinc-900/95 backdrop-blur shadow-2xl rounded-xl border border-zinc-200 dark:border-zinc-700 p-4 z-[150] animate-fade-in-right max-h-[80vh] overflow-y-auto custom-scrollbar">
 
             {/* 헤더 */}
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800 sticky top-0 bg-white/95 dark:bg-zinc-900/95 z-10 backdrop-blur">
-                <h3 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                    <Edit3 size={16} className="text-indigo-500" /> 속성 편집
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                    <Edit3 size={14} className="text-indigo-500" /> 속성 편집
                 </h3>
-                <button onClick={onClose}>
-                    <X size={18} className="text-zinc-400 hover:text-zinc-600" />
+                <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                    <X size={16} />
                 </button>
             </div>
 
-            <div className="space-y-4">
-
-                {/* 🌟 1. 베리어블 드롭다운 UI (Variable Dropdown Style) */}
+            <div className="space-y-3">
+                
+                {/* 1. 베리어블 드롭다운 */}
                 {typeOptions.length > 1 && (
                     <div className="relative" ref={dropdownRef}>
                         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">
                             {groupLabel}
                         </label>
-
-                        {/* 드롭다운 트리거 버튼 */}
                         <button
                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full text-left px-3 py-2.5 rounded-lg border flex justify-between items-center text-sm font-medium transition-all
-                                ${isDropdownOpen
-                                    ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400'
-                                    : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                                }`}
+                            className="w-full text-left px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black text-xs font-medium flex justify-between items-center hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         >
-                            <span>{currentOptionLabel}</span>
-                            <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180 text-indigo-500' : 'text-zinc-400'}`} />
+                            <span className="truncate">{currentOptionLabel}</span>
+                            <ChevronDown size={12} className={`text-zinc-400 ${isDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
-
-                        {/* 드롭다운 목록 (Custom List) */}
                         {isDropdownOpen && (
-                            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animate-fade-in-down p-1">
+                            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded shadow-xl z-50 max-h-40 overflow-y-auto p-1">
                                 {typeOptions.map((opt) => (
                                     <button
                                         key={opt.type}
-                                        onClick={() => {
-                                            onUpdate({ ...item, type: opt.type });
-                                            setIsDropdownOpen(false);
-                                        }}
-                                        className={`w-full text-left px-3 py-2 text-xs rounded-md transition-colors flex items-center gap-2
-                                            ${item.type === opt.type
-                                                ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold'
-                                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
-                                            }`}
+                                        onClick={() => { onUpdate({ ...item, type: opt.type }); setIsDropdownOpen(false); }}
+                                        className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors flex items-center gap-2
+                                            ${item.type === opt.type ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100'}`}
                                     >
-                                        {/* 선택된 항목 표시 점 */}
                                         <div className={`w-1.5 h-1.5 rounded-full ${item.type === opt.type ? 'bg-indigo-500' : 'bg-transparent'}`}></div>
-                                        {opt.label}
+                                        <span className="truncate">{opt.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -1193,77 +1185,93 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
                     </div>
                 )}
 
-                {/* 2. 설비 명칭 (텍스트 입력) */}
+                {/* 2. 설비 명칭 */}
                 <div>
                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">설비 명칭</label>
                     <input
                         type="text"
                         value={item.label || ""}
                         onChange={(e) => onUpdate({ ...item, label: e.target.value })}
-                        className="w-full text-sm p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black outline-none text-zinc-900 dark:text-zinc-100 focus:border-indigo-500 transition-colors"
+                        className="w-full text-xs p-1.5 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black focus:border-indigo-500 outline-none transition-colors"
                     />
                 </div>
 
-                {/* 3. 높이 (기존 슬라이더 UI) */}
+                {/* 🌟 3. 이미지 업로드 (컴팩트 모드) */}
                 <div>
-                    <div className="flex justify-between mb-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">높이 (Y)</label>
-                        <span className="text-[10px] font-mono text-zinc-500">{item.y || 0}m</span>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">참조 이미지</label>
+                    <div className="flex gap-2 h-10">
+                        {item.image && (
+                            <div className="relative w-10 h-10 shrink-0 rounded border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-zinc-100 group">
+                                <img 
+                                    src={item.image} 
+                                    alt="Preview" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        if (!e.target.src.startsWith('file://')) e.target.src = `file://${item.image}`;
+                                    }} 
+                                />
+                                <button 
+                                    onClick={() => onUpdate({ ...item, image: null })}
+                                    className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <X size={12} className="text-white" />
+                                </button>
+                            </div>
+                        )}
+                        <button
+                            onClick={handleImageSelect}
+                            className="flex-1 border border-dashed border-zinc-300 dark:border-zinc-600 rounded bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center gap-2 text-xs text-zinc-500 transition-colors"
+                        >
+                            <Upload size={12} />
+                            {item.image ? "이미지 변경" : "이미지 선택"}
+                        </button>
                     </div>
-                    <input
-                        type="range"
-                        min="-5"
-                        max="20"
-                        step="0.5"
-                        value={item.y || 0}
-                        onChange={(e) => onUpdate({ ...item, y: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
-                    />
                 </div>
 
-                {/* 4. 크기 (기존 슬라이더 UI) */}
-                <div>
-                    <div className="flex justify-between mb-1">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">크기 (Scale)</label>
-                        <span className="text-[10px] font-mono text-zinc-500">x{item.scale || 1}</span>
+                {/* 🌟 4. 높이 & 크기 (2열 그리드로 통합) */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <div className="flex justify-between mb-1">
+                            <label className="text-[10px] font-bold text-zinc-400">높이 (Y)</label>
+                            <span className="text-[10px] font-mono text-zinc-500">{item.y || 0}m</span>
+                        </div>
+                        <input
+                            type="range" min="-5" max="20" step="0.5"
+                            value={item.y || 0}
+                            onChange={(e) => onUpdate({ ...item, y: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
+                        />
                     </div>
-                    <input
-                        type="range"
-                        min="0.5"
-                        max="3.0"
-                        step="0.1"
-                        value={item.scale || 1}
-                        onChange={(e) => onUpdate({ ...item, scale: parseFloat(e.target.value) })}
-                        className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
-                    />
+                    <div>
+                        <div className="flex justify-between mb-1">
+                            <label className="text-[10px] font-bold text-zinc-400">크기 (Scale)</label>
+                            <span className="text-[10px] font-mono text-zinc-500">x{item.scale || 1}</span>
+                        </div>
+                        <input
+                            type="range" min="0.5" max="3.0" step="0.1"
+                            value={item.scale || 1}
+                            onChange={(e) => onUpdate({ ...item, scale: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg cursor-pointer accent-indigo-500"
+                        />
+                    </div>
                 </div>
 
-                {/* 5. 회전 (기존 버튼식 UI) */}
+                {/* 5. 회전 */}
                 <div>
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 block">회전</label>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">회전</label>
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) - Math.PI / 2 })}
-                            className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors"
-                        >
-                            ↺ -90°
-                        </button>
-                        <button
-                            onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) + Math.PI / 2 })}
-                            className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-bold transition-colors"
-                        >
-                            ↻ +90°
-                        </button>
+                        <button onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) - Math.PI / 2 })} className="flex-1 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-[10px] font-bold transition-colors">↺ -90°</button>
+                        <button onClick={() => onUpdate({ ...item, rotation: (item.rotation || 0) + Math.PI / 2 })} className="flex-1 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded text-[10px] font-bold transition-colors">↻ +90°</button>
                     </div>
                 </div>
 
                 {/* 6. 삭제 버튼 */}
-                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
                     <button
                         onClick={onDelete}
-                        className="w-full py-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm font-bold flex items-center justify-center gap-2 rounded-lg transition-colors"
+                        className="w-full py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-1.5 rounded transition-colors"
                     >
-                        <Trash2 size={14} /> 설비 삭제
+                        <Trash2 size={12} /> 설비 삭제
                     </button>
                 </div>
             </div>
@@ -1283,33 +1291,43 @@ const FieldMapContainer = ({ workData }) => {
     const [selectedDetailItem, setSelectedDetailItem] = useState(null);
     const [matchedEquipmentInfo, setMatchedEquipmentInfo] = useState(null);
 
-    // 🌟 [추가] 설비 정보 매칭 함수
+    // 🌟 [수정] 설비 정보 매칭 함수
     const findEquipmentInfo = (mapItem) => {
-        // 1. 라벨 이름으로 매칭 시도
-        let matched = equipmentData.list.find(eq =>
-            mapItem.label && eq.title && mapItem.label.includes(eq.title)
-        );
+        if (!mapItem || !equipmentData?.list) return null;
 
-        // 2. 매칭 실패 시 타입 기반 매칭 (예시)
+        // 1. 라벨 이름으로 매칭 (정확도 높임)
+        // 공백을 제거하고 소문자로 변환하여 비교
+        const normalize = (str) => (str || "").toLowerCase().replace(/\s+/g, "");
+        const targetLabel = normalize(mapItem.label);
+
+        let matched = equipmentData.list.find(eq => {
+            const eqTitle = normalize(eq.title);
+            // 맵 라벨이 JSON 타이틀을 포함하거나, 그 반대의 경우 매칭
+            return targetLabel.includes(eqTitle) || eqTitle.includes(targetLabel);
+        });
+
+        /* ❌ [삭제] 이 부분이 범인입니다! 
+           이름 매칭에 실패했다고 해서 타입만 보고 아무 데이터나 가져오는 로직을 제거합니다.
         if (!matched && mapItem.type) {
             if (mapItem.type.includes('PUMP')) matched = equipmentData.list.find(eq => eq.title.includes('Pump'));
             if (mapItem.type.includes('VALVE')) matched = equipmentData.list.find(eq => eq.title.includes('Valve'));
         }
+        */
 
-        // 3. 관련 가이드(fieldGuides) 찾기
-        const relatedGuides = equipmentData.fieldGuides.filter(guide => {
-            // 카테고리나 제목으로 연관성 찾기
+        // 매칭된 데이터가 없으면 null 리턴
+        if (!matched) return null;
+
+        // 3. 관련 가이드(fieldGuides) 찾기 (이건 타입 기반으로 추천해줘도 괜찮음)
+        const relatedGuides = equipmentData.fieldGuides ? equipmentData.fieldGuides.filter(guide => {
             if (mapItem.type.includes('VALVE') && guide.category.includes('밸브')) return true;
             if (mapItem.type.includes('PUMP') && guide.title.includes('Pump')) return true;
             return false;
-        });
+        }) : [];
 
-        // 결과 병합
         return {
             ...matched,
             fieldGuides: relatedGuides,
-            // 이미지가 없으면 가이드의 첫번째 이미지 사용
-            image: matched?.image || relatedGuides[0]?.attachments?.[0]?.path
+            image: matched.image || (relatedGuides[0]?.attachments?.[0]?.path)
         };
     };
 

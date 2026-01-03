@@ -1,5 +1,6 @@
-﻿// Last Updated: 2026-01-03 01:53:17
+﻿// Last Updated: 2026-01-03 20:19:58
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Briefcase, BookOpen, Wrench, AlertTriangle, ChevronRight, Plus, Edit3, Trash2,
     ChevronLeft, FileText, Image, ArrowRight, Menu, History, Bot, Lock, Zap,
@@ -375,8 +376,11 @@ const WorkDetailView = ({
         });
     };
 
+    // 🌟 [수정됨] 포탈을 사용하여 모달 밖으로 튀어나오게 만든 드롭다운
     const VariableDropdown = ({ value, options, onSelect, onDirectInput, placeholder, theme = 'indigo' }) => {
         const [isOpen, setIsOpen] = useState(false);
+        const triggerRef = useRef(null); // 버튼 위치 참조용
+        const [coords, setCoords] = useState({ left: 0, top: 0, width: 0 });
 
         // 테마별 색상 설정
         const activeColor = theme === 'emerald'
@@ -386,30 +390,52 @@ const WorkDetailView = ({
         const hoverColor = theme === 'emerald'
             ? 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
             : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/20';
-        const ringColor = theme === 'emerald' ? 'focus:ring-emerald-500' : 'focus:ring-indigo-500';
+
+        // 드롭다운 열기 (위치 계산 포함)
+        const toggleDropdown = () => {
+            if (!isOpen && triggerRef.current) {
+                const rect = triggerRef.current.getBoundingClientRect();
+                setCoords({
+                    left: rect.left,
+                    top: rect.bottom + window.scrollY + 4, // 버튼 바로 아래 + 여백
+                    width: rect.width
+                });
+            }
+            setIsOpen(!isOpen);
+        };
 
         return (
-            <div className="relative w-full">
-                {/* 트리거 버튼 (현재 선택된 값 표시) */}
-                <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className={`w-full flex items-center justify-between bg-zinc-50 dark:bg-zinc-800 border ${isOpen ? `border-${theme}-500 ring-1 ring-${theme}-500` : 'border-zinc-200 dark:border-zinc-700'} rounded-xl px-4 py-3 text-sm transition-all outline-none`}
-                >
-                    <span className={value ? "text-zinc-900 dark:text-zinc-100 font-medium" : "text-zinc-400"}>
-                        {value || placeholder}
-                    </span>
-                    <ChevronDown size={16} className={`text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
+            <>
+                <div className="relative w-full">
+                    {/* 트리거 버튼 */}
+                    <button
+                        ref={triggerRef}
+                        onClick={toggleDropdown}
+                        className={`w-full flex items-center justify-between bg-zinc-50 dark:bg-zinc-800 border ${isOpen ? `border-${theme}-500 ring-1 ring-${theme}-500` : 'border-zinc-200 dark:border-zinc-700'} rounded-xl px-4 py-3 text-sm transition-all outline-none`}
+                    >
+                        <span className={value ? "text-zinc-900 dark:text-zinc-100 font-medium" : "text-zinc-400"}>
+                            {value || placeholder}
+                        </span>
+                        <ChevronDown size={16} className={`text-zinc-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                </div>
 
-                {/* 드롭다운 메뉴 (열렸을 때만 표시) */}
-                {isOpen && (
+                {/* 🌟 [핵심] Portal을 사용하여 body 레벨에 렌더링 (모달 잘림 방지) */}
+                {isOpen && createPortal(
                     <>
-                        {/* 외부 클릭 시 닫기 위한 투명 오버레이 */}
-                        <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+                        {/* 백드롭 (외부 클릭 닫기) */}
+                        <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setIsOpen(false)}></div>
 
-                        <div className="absolute left-0 top-full mt-2 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in-down max-h-64 overflow-y-auto">
+                        {/* 드롭다운 메뉴 */}
+                        <div
+                            className="fixed z-[9999] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden animate-fade-in-down max-h-64 overflow-y-auto"
+                            style={{
+                                left: coords.left,
+                                top: coords.top,
+                                width: coords.width
+                            }}
+                        >
                             <div className="p-1">
-                                {/* 옵션 리스트 */}
                                 {options.length === 0 && (
                                     <div className="px-3 py-3 text-xs text-zinc-400 text-center italic">등록된 분류가 없습니다.</div>
                                 )}
@@ -436,9 +462,10 @@ const WorkDetailView = ({
                                 </button>
                             </div>
                         </div>
-                    </>
+                    </>,
+                    document.body
                 )}
-            </div>
+            </>
         );
     };
 
@@ -2173,8 +2200,19 @@ ${contextText.substring(0, 6000)}
 
                         {/* 하단 버튼 */}
                         <div className="flex gap-3 mt-8">
-                            <button onClick={() => setModalConfig({ ...modalConfig, isOpen: false })} className="flex-1 py-3 rounded-xl border text-sm font-bold hover:bg-zinc-50">취소</button>
-                            <button onClick={handleSaveData} className="flex-1 py-3 rounded-xl text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-500 shadow-lg">등록하기</button>
+                            {/* 🌟 [수정] 다크 모드 호버 스타일 명시 (text-zinc-400, dark:hover:bg-zinc-800 등) */}
+                            <button
+                                onClick={() => setModalConfig({ ...modalConfig, isOpen: false })}
+                                className="flex-1 py-3 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={handleSaveData}
+                                className="flex-1 py-3 rounded-xl text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-500 shadow-lg transition-colors"
+                            >
+                                등록하기
+                            </button>
                         </div>
                     </div>
                 </div>

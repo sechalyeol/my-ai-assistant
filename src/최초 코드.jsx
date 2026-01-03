@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 01:53:17
+﻿// Last Updated: 2026-01-03 20:19:58
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';

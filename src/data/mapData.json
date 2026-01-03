@@ -26,7 +26,7 @@
             "z": 8,
             "rotation": 0,
             "scale": 1,
-            "label": "#1 DH Heater Condensate Pump - B",
+            "label": "#1 DH HTR Condensate Pump - B",
             "status": "NORMAL"
           },
           {
@@ -37,7 +37,7 @@
             "z": 0,
             "rotation": 0,
             "scale": 1,
-            "label": "#1 DH Heater Condensate Pump - A",
+            "label": "#1 DH HTR Condensate Pump - A",
             "status": "NORMAL"
           },
           {
@@ -48,7 +48,7 @@
             "z": -8,
             "rotation": 0,
             "scale": 1,
-            "label": "#3 DH Heater Condensate Pump - B",
+            "label": "#3 DH HTR Condensate Pump - B",
             "status": "NORMAL"
           },
           {
@@ -59,7 +59,7 @@
             "z": -15,
             "rotation": 0,
             "scale": 1,
-            "label": "#3 DH Heater Condensate Pump - A",
+            "label": "#3 DH HTR Condensate Pump - A",
             "status": "NORMAL"
           },
           {
@@ -489,9 +489,9 @@
           {
             "id": 1766680576181,
             "type": "HX_SHELL",
-            "x": 2.5,
+            "x": -0.5,
             "y": 1,
-            "z": -4.5,
+            "z": -6.5,
             "rotation": 1.5707963267948966,
             "scale": 2.5,
             "label": "#1 DH Heater",
