@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-04 01:12:40
+﻿// Last Updated: 2026-01-04 04:42:53
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path' // 이 줄이 필요합니다

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-04 01:12:40
+﻿// Last Updated: 2026-01-04 04:42:53
 // [tailwind.config.js] - 폰트 설정 변경
 /** @type {import('tailwindcss').Config} */
 export default {
