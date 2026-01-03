@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 20:19:58
+﻿// Last Updated: 2026-01-03 23:12:48
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
 const cheerio = require('cheerio');
@@ -463,4 +463,15 @@ ipcMain.handle('save-map-data', async (event, data) => {
         }
         throw error;
     }
+});
+
+ipcMain.handle('read-file-base64', async (event, filePath) => {
+  try {
+    // 파일을 동기적으로 읽어서 Base64 문자열로 반환
+    const fileData = fs.readFileSync(filePath);
+    return fileData.toString('base64');
+  } catch (error) {
+    console.error("File Read Error:", error);
+    throw error;
+  }
 });

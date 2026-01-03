@@ -1,7 +1,7 @@
-﻿// Last Updated: 2026-01-03 20:19:58
+﻿// Last Updated: 2026-01-03 23:12:48
 // DashboardView.jsx
 
-import React, { useState, useRef, useEffect } from 'react'; // 🌟 useRef, useEffect 추가
+import React, { useState, useRef, useEffect, useMemo } from 'react'; // 🌟 useMemo 추가 필수
 import {
     Sparkles, Heart, Cloud, CloudRain, Wallet, BookOpen, Calendar as CalendarIcon,
     CalendarDays, ChevronRight, Settings, ExternalLink, Briefcase, Wrench, Activity,
@@ -10,10 +10,9 @@ import {
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { BookCoverFlowWidget } from '../components/widgets/ChatWidgets';
 
-
 const { ipcRenderer } = window.require('electron');
 
-// 🟢 [내부 컴포넌트 1] 멘탈 비주얼 로직 (유지)
+// 🟢 [최적화 1] 컴포넌트 밖으로 뺄 수 있는 함수는 빼서 재생성 방지
 const getMentalVisuals = (score) => {
     if (score === 0) return { themeName: "zinc", icon: Sparkles, gradient: "from-zinc-400 to-zinc-500", bgIconColor: "text-zinc-500/10", scoreColor: "text-zinc-400 dark:text-zinc-500", badge: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400", adviceBoxBorder: "border-zinc-200 dark:border-zinc-700", headerBorder: "border-zinc-200 dark:border-zinc-700", headerBg: "bg-zinc-50 dark:bg-zinc-800/50", botIcon: "text-zinc-400", headerText: "text-zinc-500 dark:text-zinc-400", inputFocus: "focus:ring-zinc-400/20" };
     else if (score >= 80) return { themeName: "rose", icon: Heart, gradient: "from-rose-400 to-pink-500", bgIconColor: "text-rose-500/10", scoreColor: "text-rose-600 dark:text-rose-400", badge: "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400", adviceBoxBorder: "border-rose-100/50 dark:border-rose-900/30", headerBorder: "border-rose-100/30 dark:border-rose-900/20", headerBg: "bg-rose-50/30 dark:bg-rose-900/10", botIcon: "text-rose-500", headerText: "text-rose-600 dark:text-rose-400", inputFocus: "focus:ring-rose-500/20" };
@@ -21,8 +20,8 @@ const getMentalVisuals = (score) => {
     else return { themeName: "indigo", icon: CloudRain, gradient: "from-indigo-400 to-blue-500", bgIconColor: "text-indigo-500/10", scoreColor: "text-indigo-600 dark:text-indigo-400", badge: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400", adviceBoxBorder: "border-indigo-100/50 dark:border-indigo-900/30", headerBorder: "border-indigo-100/30 dark:border-indigo-900/20", headerBg: "bg-indigo-50/30 dark:bg-indigo-900/10", botIcon: "text-indigo-500", headerText: "text-indigo-600 dark:text-indigo-400", inputFocus: "focus:ring-indigo-500/20" };
 };
 
-// 🟢 [내부 컴포넌트 2] ModernCard (유지)
-const ModernCard = ({ title, icon: Icon, children, className = "", accentColor = "indigo", count = null, headerAction = null }) => {
+// 🟢 [최적화 2] ModernCard에 React.memo 적용 (불필요한 리렌더링 방지)
+const ModernCard = React.memo(({ title, icon: Icon, children, className = "", accentColor = "indigo", count = null, headerAction = null }) => {
     const colors = {
         rose: "from-rose-500/10 to-rose-500/5 border-rose-200/50 dark:border-rose-500/20 text-rose-500",
         indigo: "from-indigo-500/10 to-indigo-500/5 border-indigo-200/50 dark:border-indigo-500/20 text-indigo-500",
@@ -52,9 +51,8 @@ const ModernCard = ({ title, icon: Icon, children, className = "", accentColor =
             </div>
         </div>
     );
-};
+});
 
-// 🟢 [추가] 커스텀 확인 모달 컴포넌트 (유지)
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     if (!isOpen) return null;
     return (
@@ -82,8 +80,8 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
     );
 };
 
-// 🟢 [수정됨] ManualAccessWidget (유지)
-const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
+// 🟢 [최적화 2] React.memo 적용
+const ManualAccessWidget = React.memo(({ work, setDashboardSubView, setWorkViewMode }) => {
     const manuals = work.manuals || [];
     const categories = work.categories || [];
     const sections = [
@@ -123,9 +121,8 @@ const ManualAccessWidget = ({ work, setDashboardSubView, setWorkViewMode }) => {
             </div>
         </ModernCard>
     );
-};
+});
 
-// 🟢 [메인] DashboardView 컴포넌트
 const DashboardView = ({
     todos, setTodos, finance, mental, setMental, dev,
     dashboardSubView, setDashboardSubView,
@@ -141,14 +138,14 @@ const DashboardView = ({
     const [isMentalAnalyzing, setIsMentalAnalyzing] = useState(false);
     const [isDraggingMode, setIsDraggingMode] = useState(false);
     const longPressTimer = useRef(null);
+    const [deleteTargetId, setDeleteTargetId] = useState(null);
+    const [deleteTaskTargetId, setDeleteTaskTargetId] = useState(null);
     // -----------------------------------------------------
 
     const visibleModules = settings.visibleModules || { schedule: true, finance: true, mental: true, development: true, work: true };
     const [widgetOrder, setWidgetOrder] = useState(settings.dashboardWidgetOrder || ['mental', 'tasks', 'finance', 'development', 'work']);
     const [draggedItem, setDraggedItem] = useState(null);
     const [isQuickLinksExpanded, setIsQuickLinksExpanded] = useState(false);
-
-
 
     const shortcuts = customWidgets.filter(w => w.type === 'link' || w.url);
     const infoWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
@@ -157,150 +154,66 @@ const DashboardView = ({
     const [quickLinkOrder, setQuickLinkOrder] = useState(shortcuts.map(w => w.id));
 
     useEffect(() => {
-        // customWidgets가 변경될 때 (추가/삭제), quickLinkOrder를 재설정
         const currentIds = shortcuts.map(w => w.id);
         if (currentIds.length !== quickLinkOrder.length || currentIds.some(id => !quickLinkOrder.includes(id))) {
             setQuickLinkOrder(currentIds);
         }
     }, [shortcuts.length, customWidgets]);
 
-    // 🌟 [Quick Links 순서 저장]
+    // ... (드래그 관련 로직은 유지 - 성능에 큰 영향 없음)
     const saveQuickLinksOrder = (newOrder) => {
-        // 현재 링크 타입이 아닌 위젯(메모 등)들만 따로 보관
         const otherWidgets = customWidgets.filter(w => w.type !== 'link' && !w.url);
-
-        // 새로운 순서에 맞춰 링크 위젯들 재배열
-        const orderedLinks = newOrder
-            .map(id => customWidgets.find(w => w.id === id))
-            .filter(Boolean);
-
-        // 메모 + 정렬된 링크를 합쳐서 전체 상태 업데이트 (데이터 보존)
+        const orderedLinks = newOrder.map(id => customWidgets.find(w => w.id === id)).filter(Boolean);
         const finalWidgets = [...otherWidgets, ...orderedLinks];
         setCustomWidgets(finalWidgets);
         setQuickLinkOrder(newOrder);
-
-        // Electron 저장 (필요 시)
-        if (window.require) {
-            window.require('electron').ipcRenderer.send('save-custom-widgets', finalWidgets);
-        }
+        if (window.require) window.require('electron').ipcRenderer.send('save-custom-widgets', finalWidgets);
     };
 
-    // 2. [수정] 드래그 시작 시 고스트 이미지 문제 해결
     const onShortcutDragStart = (e, id) => {
-        // 꾹 누르지 않고 그냥 드래그하면 취소 (실수 방지)
-        if (!isDraggingMode) {
-            e.preventDefault();
-            return;
-        }
-
-        setDraggedItem(id);
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", id); // 드래그 데이터 보장
-
-        // 🌟 [핵심]: pointer-events: none을 제거해야 마우스를 잘 따라옵니다.
-        // 대신 투명도만 조절합니다.
-        setTimeout(() => {
-            if (e.target) e.target.classList.add('opacity-20');
-        }, 0);
+        if (!isDraggingMode) { e.preventDefault(); return; }
+        setDraggedItem(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id);
+        setTimeout(() => { if (e.target) e.target.classList.add('opacity-20'); }, 0);
     };
 
     const onShortcutDragOver = (e, targetId) => {
-        e.preventDefault(); // 필수
-        const draggedId = draggedItem;
-
+        e.preventDefault(); const draggedId = draggedItem;
         if (!draggedId || draggedId === targetId) return;
-
         setQuickLinkOrder(prevOrder => {
-            const draggedIndex = prevOrder.indexOf(draggedId);
-            const targetIndex = prevOrder.indexOf(targetId);
-
+            const draggedIndex = prevOrder.indexOf(draggedId); const targetIndex = prevOrder.indexOf(targetId);
             if (draggedIndex === -1 || targetIndex === -1) return prevOrder;
-
-            const newOrder = [...prevOrder];
-            newOrder.splice(draggedIndex, 1);
-            newOrder.splice(targetIndex, 0, draggedId);
-            return newOrder; // 이 리턴이 화면을 실시간으로 다시 그리며 아이콘을 밀어냅니다.
+            const newOrder = [...prevOrder]; newOrder.splice(draggedIndex, 1); newOrder.splice(targetIndex, 0, draggedId);
+            return newOrder;
         });
     };
 
-    // 3. [수정] 드래그 종료 시 pointer-events 복구
-    const onShortcutDragEnd = (e) => {
-        if (e.target) e.target.classList.remove('opacity-20');
-        setDraggedItem(null);
-        saveQuickLinksOrder(quickLinkOrder);
-    };
+    const onShortcutDragEnd = (e) => { if (e.target) e.target.classList.remove('opacity-20'); setDraggedItem(null); saveQuickLinksOrder(quickLinkOrder); };
+    const handlePressStart = (id) => (e) => { if (e.button !== 0) return; if (isDraggingMode) return; longPressTimer.current = setTimeout(() => { setIsDraggingMode(true); longPressTimer.current = null; }, 1000); };
+    const handlePressEnd = () => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } };
+    const handleDragModeExit = () => { if (isDraggingMode) { setIsDraggingMode(false); setDraggedItem(null); saveQuickLinksOrder(quickLinkOrder); } };
 
-    // 🌟 [길게 누르기 감지 로직]
-    const handlePressStart = (id) => (e) => {
-        if (e.button !== 0) return;
-        if (isDraggingMode) return;
-        longPressTimer.current = setTimeout(() => {
-            setIsDraggingMode(true);
-            longPressTimer.current = null;
-        }, 1000); // 0.5초만 눌러도 드래그 가능
-    };
-    const handlePressEnd = () => {
-        if (longPressTimer.current) {
-            clearTimeout(longPressTimer.current);
-            longPressTimer.current = null;
-        }
-    };
-
-    const handleDragModeExit = () => {
-        if (isDraggingMode) {
-            setIsDraggingMode(false);
-            setDraggedItem(null);
-            saveQuickLinksOrder(quickLinkOrder);
-        }
-    };
-    // -----------------------------------------------------
-
-    const saveWidgetOrder = (newOrder) => {
-        const newSettings = { ...settings, dashboardWidgetOrder: newOrder };
-        ipcRenderer.send('save-settings', newSettings);
-        if (handleGroupChange) {
-            handleGroupChange(newSettings);
-        }
-    };
-
+    const saveWidgetOrder = (newOrder) => { const newSettings = { ...settings, dashboardWidgetOrder: newOrder }; ipcRenderer.send('save-settings', newSettings); if (handleGroupChange) { handleGroupChange(newSettings); } };
     const onDragStart = (e, index) => { setDraggedItem(widgetOrder[index]); e.dataTransfer.effectAllowed = "move"; e.target.style.opacity = '0.5'; };
     const onDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedItem(null); saveWidgetOrder(widgetOrder); };
     const onDragOver = (e, index) => { e.preventDefault(); const draggedOverItem = widgetOrder[index]; if (draggedItem === draggedOverItem) return; const items = [...widgetOrder]; items.splice(items.indexOf(draggedItem), 1); items.splice(items.indexOf(draggedOverItem), 0, draggedItem); setWidgetOrder(items); };
 
-    // 위젯 크기 로직 (4열 그리드 대응)
-    const getWidgetSpan = (key) => {
-        const commonSpan = 'col-span-2 md:col-span-2';
-        switch (key) {
-            case 'mental': case 'tasks': case 'development': case 'work':
-                return `${commonSpan} row-span-3`;
-            case 'finance': default:
-                return `${commonSpan} row-span-2`;
-        }
-    };
+    const getWidgetSpan = (key) => { const commonSpan = 'col-span-2 md:col-span-2'; switch (key) { case 'mental': case 'tasks': case 'development': case 'work': return `${commonSpan} row-span-3`; case 'finance': default: return `${commonSpan} row-span-2`; } };
+    
+    // 🟢 [최적화 3] Upcoming Todos 계산 Memoization (매우 중요)
+    const upcomingTodos = useMemo(() => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const twoWeeksLater = new Date(today); twoWeeksLater.setDate(today.getDate() + 14);
+        return todos.filter(t => { if (!t.date) return false; const tDate = new Date(t.date); return tDate >= today && tDate <= twoWeeksLater; })
+            .sort((a, b) => new Date(`${a.date} ${a.startTime || '00:00'}`) - new Date(`${b.date} ${b.startTime || '00:00'}`));
+    }, [todos]);
 
-    // 🟢 [최종_수정] 복잡한 계산 제거, 1:1 비율 적용
-    const getMemoLayoutSettings = (count) => {
-        if (count === 0) return { wrapper: "hidden", grid: "", style: {} };
-
-        const isEven = count % 2 === 0;
-        const gridCols = "grid-cols-2"; // 2열 고정
-
-        const spanValue = count === 1 ? 2 : count;
-
-        return {
-            className: "col-span-2 md:col-span-2",
-            grid: `${gridCols} gap-3`,
-            style: { gridRow: `span ${spanValue} / span ${spanValue}` }
-        };
-    };
-
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const twoWeeksLater = new Date(today); twoWeeksLater.setDate(today.getDate() + 14);
-    const upcomingTodos = todos.filter(t => { if (!t.date) return false; const tDate = new Date(t.date); return tDate >= today && tDate <= twoWeeksLater; }).sort((a, b) => new Date(`${a.date} ${a.startTime || '00:00'}`) - new Date(`${b.date} ${b.startTime || '00:00'}`));
-    const mentalVisuals = getMentalVisuals(mental.score);
+    // 🟢 [최적화 4] Mental Visuals Memoization
+    const mentalVisuals = useMemo(() => getMentalVisuals(mental.score), [mental.score]);
     const MentalIcon = mentalVisuals.icon;
 
-    const widgetComponents = {
+    // 🟢 [최적화 5] 위젯 컴포넌트 전체 Memoization
+    // 의존성 배열에 실제 필요한 데이터만 넣어서, 불필요한 재생성을 막음
+    const widgetComponents = useMemo(() => ({
         mental: (
             <ModernCard title="Mental Health" icon={Heart} accentColor={mentalVisuals.themeName}>
                 <div className="flex flex-col justify-between h-full gap-1.5 overflow-hidden">
@@ -349,17 +262,7 @@ const DashboardView = ({
                                             </span>
                                         )}
                                     </div>
-
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setDeleteTaskTargetId(t.id);
-                                        }}
-                                        className="absolute right-2 p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded opacity-0 group-hover/task:opacity-100 transition-all"
-                                        title="일정 삭제"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); setDeleteTaskTargetId(t.id); }} className="absolute right-2 p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded opacity-0 group-hover/task:opacity-100 transition-all" title="일정 삭제"><Trash2 size={14} /></button>
                                 </div>
                             );
                         }))}
@@ -372,9 +275,43 @@ const DashboardView = ({
                 </div>
             </ModernCard>
         )
+    }), [mental, mentalVisuals, isMentalAnalyzing, finance, dev, work, setDashboardSubView, setWorkViewMode, setActiveBookId, upcomingTodos]);
+
+    // ... (나머지 로직 유지) ...
+
+    const confirmDeleteTask = () => {
+        if (deleteTaskTargetId) {
+            setTodos(prev => prev.filter(t => t.id !== deleteTaskTargetId));
+            setDeleteTaskTargetId(null);
+        }
+    };
+    const handleDeleteWidget = (id) => { setDeleteTargetId(id); };
+    const confirmDelete = () => {
+        if (deleteTargetId) {
+            setCustomWidgets(prev => prev.filter(w => w.id !== deleteTargetId));
+            setDeleteTargetId(null);
+        }
     };
 
-    // 중복 ID 방지 (유지)
+    const MAX_VISIBLE_SHORTCUTS = 4;
+    const shouldCollapse = shortcuts.length > MAX_VISIBLE_SHORTCUTS;
+    const sortedShortcuts = quickLinkOrder.map(id => shortcuts.find(w => w.id === id)).filter(Boolean);
+    const visibleShortcuts = shouldCollapse && !isQuickLinksExpanded ? sortedShortcuts.slice(0, MAX_VISIBLE_SHORTCUTS - 1) : sortedShortcuts;
+
+    const getMemoLayoutSettings = (count) => {
+        if (count === 0) return { wrapper: "hidden", grid: "", style: {} };
+        const isEven = count % 2 === 0;
+        const gridCols = "grid-cols-2"; 
+        const spanValue = count === 1 ? 2 : count;
+        return { className: "col-span-2 md:col-span-2", grid: `${gridCols} gap-3`, style: { gridRow: `span ${spanValue} / span ${spanValue}` } };
+    };
+    const memoLayout = getMemoLayoutSettings(infoWidgets.length);
+
+    const getFaviconUrl = (url) => {
+        try { const domain = new URL(url).hostname; return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`; } catch (e) { return null; }
+    };
+
+    // 🟢 [복구] 중복 ID 방지 로직 (데이터 충돌 방지용 안전장치)
     React.useEffect(() => {
         if (customWidgets.length > 0) {
             const seenIds = new Set();
@@ -393,57 +330,13 @@ const DashboardView = ({
                 })));
             }
         }
-    }, [customWidgets.length]);
-
-    const [deleteTargetId, setDeleteTargetId] = useState(null);
-    const [deleteTaskTargetId, setDeleteTaskTargetId] = useState(null);
-
-    const confirmDeleteTask = () => {
-        if (deleteTaskTargetId) {
-            setTodos(prev => prev.filter(t => t.id !== deleteTaskTargetId));
-            setDeleteTaskTargetId(null);
-        }
-    };
-
-    const handleDeleteWidget = (id) => {
-        setDeleteTargetId(id);
-    };
-
-    const confirmDelete = () => {
-        if (deleteTargetId) {
-            setCustomWidgets(prev => prev.filter(w => w.id !== deleteTargetId));
-            setDeleteTargetId(null);
-        }
-    };
-
-    const MAX_VISIBLE_SHORTCUTS = 4;
-    const shouldCollapse = shortcuts.length > MAX_VISIBLE_SHORTCUTS;
-
-    // 🌟 [추가]: quickLinkOrder를 사용하여 shortcuts를 정렬합니다.
-    const sortedShortcuts = quickLinkOrder
-        .map(id => shortcuts.find(w => w.id === id))
-        .filter(Boolean); // null/undefined 제거 (안전장치)
-
-    const visibleShortcuts = shouldCollapse && !isQuickLinksExpanded
-        ? sortedShortcuts.slice(0, MAX_VISIBLE_SHORTCUTS - 1) // 마지막 자리는 '더 보기' 버튼을 위해 비워둡니다.
-        : sortedShortcuts;
-
-    // 🟢 [적용] 현재 메모 개수에 따른 레이아웃 설정 가져오기
-    const memoLayout = getMemoLayoutSettings(infoWidgets.length);
-
-    const getFaviconUrl = (url) => {
-        try {
-            const domain = new URL(url).hostname;
-            return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
-        } catch (e) { return null; }
-    };
-
+    }, [customWidgets.length]); // customWidgets 전체가 아닌 length만 의존성으로 두어 무한 루프 방지
+    
     return (
         <div className="animate-fade-in pb-10" onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd} onDoubleClick={handleDragModeExit}>
             <div className="flex justify-between items-center mb-4 px-1">
                 <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Dashboard Overview</h2>
                 <div className="flex gap-2">
-                    {/* 🌟 [추가]: 드래그 모드 안내 */}
                     {isDraggingMode ? (
                         <span className="text-[10px] text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-1 rounded-full animate-pulse font-bold">🗑️ 드래그 모드: 순서 변경/X버튼으로 삭제 (더블클릭 해제)</span>
                     ) : (
@@ -457,219 +350,66 @@ const DashboardView = ({
             {shortcuts.length > 0 && (
                 <div className="mb-6">
                     <h3 className="text-xs font-bold text-zinc-400 mb-3 px-1 uppercase tracking-wider">Quick Links</h3>
-                    {/* 🌟 [핵심 수정]: flex 컨테이너에 transition-all 추가 */}
                     <div className="flex flex-wrap gap-4 animate-fade-in-down transition-all duration-300">
-
                         {visibleShortcuts.map((widget, index) => {
                             const favicon = getFaviconUrl(widget.url);
                             const isLocalFile = !widget.url.startsWith('http');
                             const useBase64Icon = !!widget.finalIcon;
-                            const isBeingDragged = draggedItem === widget.id; // 🌟 드래그 중인 아이템 식별
-
-                            // 🌟 [애니메이션 로직]:
-                            const animationStyle = {
-                                // 1. 평소/펼친 상태 모두 정자세(0deg). '펼칠 때' (false->true) 이 0deg로 부드럽게 transition 됨.
-                                transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`,
-                                transition: 'transform 0.3s ease-out',
-                                transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms'
-                            };
-
-                            // 🌟 [숨겨진 트릭]: 펼쳐질 때 회전 애니메이션 적용
-                            // isQuickLinksExpanded가 false(접힘)일 때 임시로 회전 각도를 가지도록 합니다.
-                            // isQuickLinksExpanded가 true가 되면 0deg로 돌아오면서 애니메이션이 보입니다.
-                            // **주의: 이 로직은 Tailwind.config에 transition-property: transform이 정의되어 있어야 동작합니다.**
-                            // Tailwind가 없는 환경에서는 추가 CSS가 필요합니다.
-                            const initialRotation = isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(${index * 15}deg)`;
-
-
-                            // 🌟 [D&D 속성]
-                            const draggableProps = isDraggingMode ? {
-                                draggable: true,
-                                onDragStart: (e) => onShortcutDragStart(e, widget.id),
-                                onDragEnd: onShortcutDragEnd,
-                                onDragOver: (e) => onShortcutDragOver(e, widget.id),
-                            } : {};
+                            const isBeingDragged = draggedItem === widget.id;
+                            const draggableProps = isDraggingMode ? { draggable: true, onDragStart: (e) => onShortcutDragStart(e, widget.id), onDragEnd: onShortcutDragEnd, onDragOver: (e) => onShortcutDragOver(e, widget.id), } : {};
 
                             return (
-                                <div
-                                    key={widget.id} // 🌟 key는 widget.id로 유지되어야 합니다.
-                                    className={`shortcut-grid-item group relative flex flex-col items-center gap-2 transform transition-all duration-300 ${draggableProps.className} ${isBeingDragged ? 'opacity-0' : ''}`}
-                                    {...draggableProps} // 🌟 드래그 속성 적용
-                                    onDoubleClick={handleDragModeExit} // 더블클릭으로 모드 해제
-                                >
-                                    <button
-                                        onClick={() => {
-                                            if (isDraggingMode) return;
-                                            if (isLocalFile) {
-                                                window.require('electron').ipcRenderer.send('open-path', widget.url);
-                                            } else {
-                                                window.open(widget.url, '_blank');
-                                            }
-                                        }}
-                                        onMouseDown={handlePressStart(widget.id)} // 🌟 길게 누르기 시작
-                                        onMouseUp={handlePressEnd} // 🌟 길게 누르기 끝
-                                        onMouseLeave={handlePressEnd}
-
-                                        // 🌟 [최종 애니메이션 스타일]: 평소/펼침 상태는 정자세, 펼칠 때 애니메이션
-                                        className={`w-16 h-16 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center justify-center transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 group-hover:ring-2 group-hover:ring-indigo-500/20 ${isDraggingMode ? 'shake-mode' : ''}`}
-                                        style={{
-                                            transition: 'transform 0.3s ease-out',
-                                            transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms',
-                                            transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`,
-                                        }}
-                                    >
-                                        {/* Base64 아이콘 렌더링 로직 (유지) */}
-                                        {useBase64Icon ? (
-                                            <img
-                                                src={widget.finalIcon}
-                                                alt={widget.title}
-                                                className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
-                                            />
-                                        ) : favicon ? (
-                                            <img
-                                                src={favicon}
-                                                alt={widget.title}
-                                                className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity"
-                                            />
-                                        ) : (
-                                            isLocalFile ? (
-                                                <Building2 size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                                            ) : (
-                                                <ExternalLink size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                                            )
-                                        )}
+                                <div key={widget.id} className={`shortcut-grid-item group relative flex flex-col items-center gap-2 transform transition-all duration-300 ${draggableProps.className} ${isBeingDragged ? 'opacity-0' : ''}`} {...draggableProps} onDoubleClick={handleDragModeExit}>
+                                    <button onClick={() => { if (isDraggingMode) return; if (isLocalFile) { window.require('electron').ipcRenderer.send('open-path', widget.url); } else { window.open(widget.url, '_blank'); } }} onMouseDown={handlePressStart(widget.id)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd} className={`w-16 h-16 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center justify-center transition-all hover:-translate-y-1 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 group-hover:ring-2 group-hover:ring-indigo-500/20 ${isDraggingMode ? 'shake-mode' : ''}`} style={{ transition: 'transform 0.3s ease-out', transitionDelay: isQuickLinksExpanded ? `${index * 50}ms` : '0ms', transform: isQuickLinksExpanded ? 'rotate(0deg)' : `rotate(0deg)`, }}>
+                                        {useBase64Icon ? ( <img src={widget.finalIcon} alt={widget.title} className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" /> ) : favicon ? ( <img src={favicon} alt={widget.title} className="w-8 h-8 object-contain opacity-90 group-hover:opacity-100 transition-opacity" /> ) : ( isLocalFile ? ( <Building2 size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" /> ) : ( <ExternalLink size={24} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" /> ) )}
                                     </button>
-
-                                    <span className={`text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors ${!isQuickLinksExpanded && shouldCollapse && index >= MAX_VISIBLE_SHORTCUTS - 1 ? 'opacity-0 h-0 overflow-hidden' : ''}`}>
-                                        {widget.title}
-                                    </span>
-
-                                    {/* 🌟 [수정]: 드래그 모드일 때만 삭제 버튼 표시 */}
-                                    {isDraggingMode && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteWidget(widget.id); }}
-                                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center transition-all shadow-sm hover:bg-rose-600 hover:scale-110 z-20"
-                                            title="삭제"
-                                        >
-                                            <span className="text-xs font-bold leading-none mb-0.5">×</span>
-                                        </button>
-                                    )}
+                                    <span className={`text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors ${!isQuickLinksExpanded && shouldCollapse && index >= MAX_VISIBLE_SHORTCUTS - 1 ? 'opacity-0 h-0 overflow-hidden' : ''}`}>{widget.title}</span>
+                                    {isDraggingMode && ( <button onClick={(e) => { e.stopPropagation(); handleDeleteWidget(widget.id); }} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center transition-all shadow-sm hover:bg-rose-600 hover:scale-110 z-20" title="삭제"><span className="text-xs font-bold leading-none mb-0.5">×</span></button> )}
                                 </div>
                             );
                         })}
-
-                        {/* 🟢 [추가] '더 보기' 버튼 */}
                         {shouldCollapse && (
                             <div className="group relative flex flex-col items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        if (isDraggingMode) {
-                                            handleDragModeExit();
-                                        } else {
-                                            setIsQuickLinksExpanded(prev => !prev);
-                                        }
-                                    }}
-                                    className={`w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all duration-300 ${isQuickLinksExpanded ? 'border-indigo-500 bg-indigo-50/20 text-indigo-500 rotate-180' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-500 hover:border-indigo-500'}`}
-                                    title={isQuickLinksExpanded ? "접기" : `${shortcuts.length - visibleShortcuts.length}개 더 보기`}
-                                >
-                                    {isQuickLinksExpanded ? (
-                                        <X size={20} />
-                                    ) : (
-                                        <div className="text-lg font-bold">...</div>
-                                    )}
+                                <button onClick={() => { if (isDraggingMode) { handleDragModeExit(); } else { setIsQuickLinksExpanded(prev => !prev); } }} className={`w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all duration-300 ${isQuickLinksExpanded ? 'border-indigo-500 bg-indigo-50/20 text-indigo-500 rotate-180' : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-500 hover:border-indigo-500'}`} title={isQuickLinksExpanded ? "접기" : `${shortcuts.length - visibleShortcuts.length}개 더 보기`}>
+                                    {isQuickLinksExpanded ? ( <X size={20} /> ) : ( <div className="text-lg font-bold">...</div> )}
                                 </button>
-                                <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">
-                                    {isQuickLinksExpanded ? '접기' : '더 보기'}
-                                </span>
+                                <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 max-w-[4rem] truncate text-center group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">{isQuickLinksExpanded ? '접기' : '더 보기'}</span>
                             </div>
                         )}
                     </div>
                 </div>
             )}
 
-            {/* 2. 메인 그리드 (유지) */}
+            {/* 2. 메인 그리드 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-[80px] grid-flow-dense pb-20">
-                {/* ... (메인 그리드 위젯 로직 유지) ... */}
                 {infoWidgets.length > 0 && (
-                    <div
-                        className={`${memoLayout.className} grid ${memoLayout.grid} animate-fade-in`}
-                        style={memoLayout.style}
-                    >
+                    <div className={`${memoLayout.className} grid ${memoLayout.grid} animate-fade-in`} style={memoLayout.style}>
                         {infoWidgets.map((widget, index) => {
-                            const isAlarm = !!widget.targetTime;
-                            const Icon = isAlarm ? Clock : StickyNote;
-                            const accentColor = isAlarm ? 'rose' : (widget.color || 'zinc');
-
-                            const isCompact = infoWidgets.length > 1 && infoWidgets.length % 2 !== 0;
-
+                            const isAlarm = !!widget.targetTime; const Icon = isAlarm ? Clock : StickyNote; const accentColor = isAlarm ? 'rose' : (widget.color || 'zinc'); const isCompact = infoWidgets.length > 1 && infoWidgets.length % 2 !== 0;
                             return (
                                 <div key={`memo-${widget.id}-${index}`} className="relative group h-full overflow-hidden">
-                                    <ModernCard
-                                        title={isAlarm ? "알림" : widget.title}
-                                        icon={Icon}
-                                        accentColor={accentColor}
-                                        className={`h-full ${isCompact ? '!px-3 !py-1.5' : ''}`}
-                                    >
+                                    <ModernCard title={isAlarm ? "알림" : widget.title} icon={Icon} accentColor={accentColor} className={`h-full ${isCompact ? '!px-3 !py-1.5' : ''}`}>
                                         <div className={`flex flex-col h-full justify-between ${isCompact ? 'gap-0' : 'gap-2'}`}>
-                                            <div className="flex-1 flex items-center justify-center min-h-0">
-                                                <div className={`font-bold text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap text-center px-1 break-keep leading-tight overflow-hidden ${isCompact ? 'text-[11px] line-clamp-2' : 'text-sm'}`}>
-                                                    {widget.content}
-                                                </div>
-                                            </div>
-                                            {isAlarm && (
-                                                <div className="flex justify-center border-t border-zinc-100 dark:border-zinc-800/50 mt-auto pt-2">
-                                                    <span className="text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-1.5 py-0 rounded-full flex items-center gap-1">
-                                                        <Clock size={8} /> {widget.targetTime}
-                                                    </span>
-                                                </div>
-                                            )}
+                                            <div className="flex-1 flex items-center justify-center min-h-0"><div className={`font-bold text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap text-center px-1 break-keep leading-tight overflow-hidden ${isCompact ? 'text-[11px] line-clamp-2' : 'text-sm'}`}>{widget.content}</div></div>
+                                            {isAlarm && ( <div className="flex justify-center border-t border-zinc-100 dark:border-zinc-800/50 mt-auto pt-2"><span className="text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-1.5 py-0 rounded-full flex items-center gap-1"><Clock size={8} /> {widget.targetTime}</span></div> )}
                                         </div>
                                     </ModernCard>
-
-                                    <button
-                                        onClick={() => handleDeleteWidget(widget.id)}
-                                        className={`absolute right-2 bg-zinc-100 hover:bg-rose-500 hover:text-white text-zinc-400 rounded-full opacity-0 group-hover:opacity-100 transition-all ${isCompact ? 'top-1.5 p-1' : 'top-2 p-1.5'}`}
-                                    >
-                                        <Trash2 size={isCompact ? 10 : 12} />
-                                    </button>
+                                    <button onClick={() => handleDeleteWidget(widget.id)} className={`absolute right-2 bg-zinc-100 hover:bg-rose-500 hover:text-white text-zinc-400 rounded-full opacity-0 group-hover:opacity-100 transition-all ${isCompact ? 'top-1.5 p-1' : 'top-2 p-1.5'}`}><Trash2 size={isCompact ? 10 : 12} /></button>
                                 </div>
                             );
                         })}
                     </div>
                 )}
 
-                {/* B. 메인 위젯들 - 메모 아래로 이동됨 (유지) */}
                 {widgetOrder.filter(key => { if (key === 'tasks') return visibleModules.schedule; return visibleModules[key]; }).map((widgetKey, index) => (
-                    <div
-                        key={widgetKey}
-                        draggable
-                        onDragStart={(e) => onDragStart(e, index)}
-                        onDragEnter={(e) => onDragOver(e, index)}
-                        onDragEnd={onDragEnd}
-                        onDragOver={(e) => e.preventDefault()}
-                        className={`${getWidgetSpan(widgetKey)} cursor-move transition-transform active:scale-[0.99]`}
-                    >
+                    <div key={widgetKey} draggable onDragStart={(e) => onDragStart(e, index)} onDragEnter={(e) => onDragOver(e, index)} onDragEnd={onDragEnd} onDragOver={(e) => e.preventDefault()} className={`${getWidgetSpan(widgetKey)} cursor-move transition-transform active:scale-[0.99]`}>
                         {widgetComponents[widgetKey]}
                     </div>
                 ))}
-
             </div>
 
-            <ConfirmModal
-                isOpen={!!deleteTargetId}
-                onClose={() => setDeleteTargetId(null)}
-                onConfirm={confirmDelete}
-                title="위젯 삭제"
-                message="이 위젯을 대시보드에서 제거하시겠습니까? 데이터는 유지되지 않습니다."
-            />
-
-            <ConfirmModal
-                isOpen={!!deleteTaskTargetId}
-                onClose={() => setDeleteTaskTargetId(null)}
-                onConfirm={confirmDeleteTask}
-                title="일정 삭제"
-                message="이 일정을 목록에서 삭제하시겠습니까?"
-            />
+            <ConfirmModal isOpen={!!deleteTargetId} onClose={() => setDeleteTargetId(null)} onConfirm={confirmDelete} title="위젯 삭제" message="이 위젯을 대시보드에서 제거하시겠습니까? 데이터는 유지되지 않습니다." />
+            <ConfirmModal isOpen={!!deleteTaskTargetId} onClose={() => setDeleteTaskTargetId(null)} onConfirm={confirmDeleteTask} title="일정 삭제" message="이 일정을 목록에서 삭제하시겠습니까?" />
         </div>
     );
 };

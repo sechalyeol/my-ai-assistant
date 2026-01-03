@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 20:19:58
+﻿// Last Updated: 2026-01-03 23:12:48
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment, Line, Circle } from '@react-three/drei';
@@ -152,7 +152,8 @@ const LabelFilterPanel = ({ categories, visibleState, onToggle, onToggleAll }) =
     const isAllSelected = categories.length > 0 && categories.every(cat => visibleState[cat]);
 
     return (
-        <div className="absolute top-4 left-4 z-20 bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg flex flex-col w-48 transition-all animate-fade-in-left">
+        // 👇 [수정] z-20 -> z-[60] 으로 변경 (라벨의 최대 z-index인 40~50보다 높게 설정)
+        <div className="absolute top-4 left-4 z-[60] bg-white/90 dark:bg-zinc-900/90 backdrop-blur border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg flex flex-col w-48 transition-all animate-fade-in-left">
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center justify-between p-3 w-full text-left border-b border-zinc-100 dark:border-zinc-800"
@@ -1153,7 +1154,7 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
             </div>
 
             <div className="space-y-3">
-                
+
                 {/* 1. 베리어블 드롭다운 */}
                 {typeOptions.length > 1 && (
                     <div className="relative" ref={dropdownRef}>
@@ -1202,15 +1203,15 @@ const PropertyPanel = ({ item, onUpdate, onDelete, onClose }) => {
                     <div className="flex gap-2 h-10">
                         {item.image && (
                             <div className="relative w-10 h-10 shrink-0 rounded border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-zinc-100 group">
-                                <img 
-                                    src={item.image} 
-                                    alt="Preview" 
+                                <img
+                                    src={item.image}
+                                    alt="Preview"
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
                                         if (!e.target.src.startsWith('file://')) e.target.src = `file://${item.image}`;
-                                    }} 
+                                    }}
                                 />
-                                <button 
+                                <button
                                     onClick={() => onUpdate({ ...item, image: null })}
                                     className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                 >

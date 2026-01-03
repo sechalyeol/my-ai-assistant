@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 20:19:58
+﻿// Last Updated: 2026-01-03 23:12:48
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -6,7 +6,7 @@ import {
     ChevronLeft, FileText, Image, ArrowRight, Menu, History, Bot, Lock, Zap,
     AlertCircle, X, Download, Upload, PanelRightClose, PanelRightOpen, GripVertical,
     Check, Folder, Layers, LayoutGrid, FileCode, ChevronDown, Filter, Star, StarHalf, Search,
-    Bold
+    Bold, Calendar
 } from 'lucide-react';
 import PanZoomViewer from '../components/ui/PanZoomViewer';
 import FieldMapContainer from '../components/work/FieldMap/FieldMapContainer';
@@ -142,8 +142,18 @@ const WorkDetailView = ({
         setSearchTerm('');
     }, [equipTab]);
 
+    const [showLogCalendar, setShowLogCalendar] = useState(false);
+    const [logNavDate, setLogNavDate] = useState(new Date());
+    const logDateRef = useRef(null);
+    const [logCalendarCoords, setLogCalendarCoords] = useState({ top: 0, left: 0 });
+
     // 모달 State
-    const [logModal, setLogModal] = useState({ isOpen: false, content: '', targetPart: '' });
+    const [logModal, setLogModal] = useState({
+        isOpen: false,
+        content: '',
+        targetPart: '',
+        date: new Date().toISOString().split('T')[0] // 오늘 날짜 기본값
+    });
     const [partModal, setPartModal] = useState({ isOpen: false, name: '', spec: '' });
     const [specModal, setSpecModal] = useState({ isOpen: false, key: '', value: '' });
 
@@ -757,10 +767,18 @@ ${contextText.substring(0, 6000)}
 
     const handleAddLog = () => {
         if (!logModal.content.trim()) return;
-        const newLog = { id: Date.now(), date: new Date().toISOString().split('T')[0], content: logModal.content, type: 'USER', targetPart: logModal.targetPart || '전체' };
+        // 🌟 수정됨: 고정된 오늘 날짜 대신 사용자가 선택한 date 사용
+        const newLog = {
+            id: Date.now(),
+            date: logModal.date || new Date().toISOString().split('T')[0], // 값이 없으면 오늘 날짜 
+            content: logModal.content,
+            type: 'USER',
+            targetPart: logModal.targetPart || '전체'
+        };
         setEquipment(prev => ({ ...prev, list: prev.list.map(e => e.id === activeEquipId ? { ...e, logs: [newLog, ...(e.logs || [])] } : e) }));
-        setLogModal({ isOpen: false, content: '', targetPart: '' });
+        setLogModal({ isOpen: false, content: '', targetPart: '', date: '' }); // 초기화
     };
+
 
     const handleSaveStepEdit = () => {
         if (!editStepData) return;
@@ -934,6 +952,96 @@ ${contextText.substring(0, 6000)}
         setEditStepData(chapter.steps[currentStepIndex]);
     };
     const handleEditCategory = (e, c) => { e.stopPropagation(); setEditingCategoryId(c.id); setNewCatId(c.id); setNewCatName(c.label); setNewCatColor(c.color); setModalConfig({ isOpen: true, type: 'EDIT_CATEGORY', title: '카테고리 수정' }); };
+
+    // 🌟 [추가] 정비 이력용 커스텀 달력 (Amber 테마)
+    const renderLogCalendar = () => {
+        const year = logNavDate.getFullYear();
+        const month = logNavDate.getMonth();
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const lastDate = new Date(year, month + 1, 0).getDate();
+        const prevLastDate = new Date(year, month, 0).getDate();
+
+        const days = [];
+        // 이전 달 채우기
+        for (let i = firstDay - 1; i >= 0; i--) {
+            days.push({ date: new Date(year, month - 1, prevLastDate - i), isCurrentMonth: false });
+        }
+        // 이번 달 채우기
+        for (let i = 1; i <= lastDate; i++) {
+            days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+        }
+        // 다음 달 채우기
+        const remainingCells = 42 - days.length;
+        for (let i = 1; i <= remainingCells; i++) {
+            days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+        }
+
+        const handleDateClick = (e, dateObj) => {
+            e.stopPropagation();
+            const d = dateObj.date;
+            // YYYY-MM-DD 형식으로 변환
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+            setLogModal(prev => ({ ...prev, date: dateStr }));
+            setShowLogCalendar(false);
+        };
+
+        return createPortal(
+            <>
+                <div className="fixed inset-0 z-[9998]" onClick={() => setShowLogCalendar(false)} />
+                <div
+                    className="fixed z-[9999] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl p-5 animate-fade-in-up w-[300px]"
+                    style={{ top: logCalendarCoords.top, left: logCalendarCoords.left }}
+                >
+                    {/* 헤더 */}
+                    <div className="flex justify-between items-center mb-4 px-1">
+                        <button onClick={(e) => { e.stopPropagation(); setLogNavDate(new Date(year, month - 1, 1)); }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full text-zinc-400 hover:text-zinc-600 transition-colors"><ChevronLeft size={18} /></button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-base font-bold text-zinc-800 dark:text-zinc-100">{year}년 {month + 1}월</span>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); setLogNavDate(new Date(year, month + 1, 1)); }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full text-zinc-400 hover:text-zinc-600 transition-colors"><ChevronRight size={18} /></button>
+                    </div>
+
+                    {/* 요일 */}
+                    <div className="grid grid-cols-7 mb-2 text-center">
+                        {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+                            <span key={d} className={`text-[10px] font-bold ${i === 0 ? 'text-rose-500' : i === 6 ? 'text-blue-500' : 'text-zinc-400'}`}>{d}</span>
+                        ))}
+                    </div>
+
+                    {/* 날짜 그리드 */}
+                    <div className="grid grid-cols-7 gap-1">
+                        {days.map((dObj, i) => {
+                            const dateStr = `${dObj.date.getFullYear()}-${String(dObj.date.getMonth() + 1).padStart(2, '0')}-${String(dObj.date.getDate()).padStart(2, '0')}`;
+                            const isSelected = logModal.date === dateStr;
+                            const isToday = new Date().toDateString() === dObj.date.toDateString();
+
+                            return (
+                                <div
+                                    key={i}
+                                    onClick={(e) => handleDateClick(e, dObj)}
+                                    className={`
+                                        relative h-8 w-8 mx-auto flex items-center justify-center text-xs rounded-full cursor-pointer transition-all
+                                        ${!dObj.isCurrentMonth ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-700 dark:text-zinc-200'}
+                                        ${isSelected
+                                            ? 'bg-amber-500 text-white font-bold shadow-md scale-110'
+                                            : 'hover:bg-amber-50 dark:hover:bg-amber-900/30'
+                                        }
+                                        ${isToday && !isSelected ? 'text-amber-500 font-bold' : ''}
+                                    `}
+                                >
+                                    {dObj.date.getDate()}
+                                    {isToday && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-amber-500 rounded-full"></div>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </>,
+            document.body
+        );
+    };
 
     // --- 렌더러 ---
     const renderHome = () => (
@@ -1890,7 +1998,7 @@ ${contextText.substring(0, 6000)}
         return (
             <div className="h-full flex flex-col animate-fade-in bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
                 {/* 1. 상단 헤더 */}
-                <div class="rounded-t-2xl h-14 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center px-4 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur z-20 flex-shrink-0">
+                <div className="rounded-t-2xl h-14 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center px-4 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur z-20 flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <button onClick={() => setIsEquipTocOpen(!isEquipTocOpen)} className={`p-2 rounded-lg transition-colors ${isEquipTocOpen ? 'bg-zinc-200 dark:bg-zinc-700' : 'text-zinc-400'}`}><Menu size={18} /></button>
                         <div className="h-4 w-px bg-zinc-300 mx-1"></div>
@@ -2079,7 +2187,12 @@ ${contextText.substring(0, 6000)}
                                         ))}
                                     </div>
                                     <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                                        <button onClick={() => setLogModal({ isOpen: true, content: '', targetPart: '' })} className="w-full py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 flex items-center justify-center gap-2"><Plus size={14} /> 새 이력 작성</button>
+                                        <button onClick={() => setLogModal({
+                                            isOpen: true,
+                                            content: '',
+                                            targetPart: '',
+                                            date: new Date().toISOString().split('T')[0]
+                                        })} className="w-full py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-50 flex items-center justify-center gap-2"><Plus size={14} /> 새 이력 작성</button>
                                     </div>
                                 </div>
                             )}
@@ -2443,10 +2556,44 @@ ${contextText.substring(0, 6000)}
             )}
 
             {/* 이력 작성 모달 */}
+            {/* 이력 작성 모달 내부 */}
             {logModal.isOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
                     <div className="bg-white/95 dark:bg-zinc-900/95 w-full max-w-sm mx-4 rounded-3xl p-6 shadow-2xl border border-white/20 dark:border-zinc-800/50">
                         <h3 className="font-bold mb-4 text-zinc-800 dark:text-zinc-100">정비 이력 작성</h3>
+
+                        {/* 🌟 [수정됨] 커스텀 디자인 달력 필드 */}
+                        <div className="mb-3">
+                            <label className="text-xs font-bold text-zinc-400 block mb-1">정비 일자</label>
+                            <div className="relative" ref={logDateRef}>
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={logModal.date}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        // 달력 위치 계산
+                                        if (logDateRef.current) {
+                                            const rect = logDateRef.current.getBoundingClientRect();
+                                            setLogCalendarCoords({
+                                                top: rect.bottom + window.scrollY + 4,
+                                                left: rect.left
+                                            });
+                                        }
+                                        // 현재 선택된 날짜 기준으로 달력 열기
+                                        if (logModal.date) setLogNavDate(new Date(logModal.date));
+                                        setShowLogCalendar(!showLogCalendar);
+                                    }}
+                                    className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500 font-bold cursor-pointer"
+                                    placeholder="날짜 선택"
+                                />
+                                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
+                            </div>
+                            {/* 포탈로 렌더링되는 달력 */}
+                            {showLogCalendar && renderLogCalendar()}
+                        </div>
+
+                        {/* 기존 구성품 선택 필드 */}
                         <div className="mb-3">
                             <label className="text-xs font-bold text-zinc-400 block mb-1">대상 구성품 (Component)</label>
                             <select value={logModal.targetPart} onChange={e => setLogModal({ ...logModal, targetPart: e.target.value })} className="w-full bg-zinc-50 dark:bg-zinc-800 border dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-zinc-100 outline-none">

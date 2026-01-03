@@ -1,6 +1,6 @@
-﻿// Last Updated: 2026-01-03 20:19:58
+﻿// Last Updated: 2026-01-03 23:12:48
 import React from 'react';
-import { X, Wrench, Image as ImageIcon, Activity, Droplets, Gauge, AlertCircle } from 'lucide-react';
+import { X, Wrench, Image as ImageIcon, Activity, Droplets, Gauge, AlertCircle, FileText } from 'lucide-react';
 
 const EquipmentDetailModal = ({ isOpen, onClose, item, matchedInfo }) => {
     if (!isOpen || !item) return null;
@@ -25,19 +25,18 @@ const EquipmentDetailModal = ({ isOpen, onClose, item, matchedInfo }) => {
     };
 
     return (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[2px] animate-fade-in">
-            {/* 🌟 크기 축소: max-w-lg (기존 xl보다 작음), 높이 제한 */}
-            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[80vh]">
+        // 🔴 [수정 포인트] class -> className 으로 변경 확인
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+            <div className="bg-white dark:bg-zinc-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-zinc-200 dark:border-zinc-800">
                 
-                {/* 1. 헤더 (타이틀 & 닫기 버튼만 깔끔하게) */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-                    <h2 className="text-base font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                        설비 상세 정보
-                        {/* 상태 표시 점 (작게) */}
-                        <span className={`w-2 h-2 rounded-full ${item.status === 'WARNING' ? 'bg-yellow-500' : item.status === 'ERROR' ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
+                {/* 헤더 */}
+                <div className="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                    <h2 className="text-lg font-bold flex items-center gap-2 text-zinc-800 dark:text-zinc-100">
+                        <FileText className="text-indigo-500" size={20} />
+                        {matchedInfo?.title || item?.label || "설비 상세 정보"}
                     </h2>
-                    <button onClick={onClose} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-zinc-600 transition-colors">
-                        <X size={18} />
+                    <button onClick={onClose} className="p-1 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
+                        <X size={20} className="text-zinc-500" />
                     </button>
                 </div>
 
@@ -70,40 +69,39 @@ const EquipmentDetailModal = ({ isOpen, onClose, item, matchedInfo }) => {
                                 </div>
                             </div>
 
-                            {/* 🌟 기술 스펙 (Specs) - 원하시는 유효양정, 유량 등 */}
+{/* 🌟 기술 스펙 (Specs) 수정됨 */}
                             <div className="mb-6">
                                 <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <Activity size={12} /> Technical Specs
                                 </h4>
                                 <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-100 dark:border-zinc-800 p-3">
-                                    {/* matchedInfo.specs가 있으면 그것을, 없으면 meta에서 위치/날짜 뺀 나머지 표시 */}
                                     {matchedInfo.specs ? (
                                         <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                                            {Object.entries(matchedInfo.specs).map(([key, value]) => (
-                                                <div key={key} className="flex justify-between items-center text-sm border-b border-dashed border-zinc-200 dark:border-zinc-700/50 pb-1 last:border-0">
-                                                    <span className="text-zinc-500 font-medium capitalize">{key}</span>
-                                                    <span className="text-zinc-800 dark:text-zinc-200 font-bold">{value}</span>
-                                                </div>
-                                            ))}
+                                            {/* 🟢 수정: 배열인지 객체인지 확인하여 처리 */}
+                                            {Array.isArray(matchedInfo.specs) ? (
+                                                // Case 1: 직접 등록한 데이터 (Array 형태: [{id, key, value}])
+                                                matchedInfo.specs.map((spec) => (
+                                                    <div key={spec.id || spec.key} className="flex justify-between items-center text-sm border-b border-dashed border-zinc-200 dark:border-zinc-700/50 pb-1 last:border-0">
+                                                        <span className="text-zinc-500 font-medium capitalize">{spec.key}</span>
+                                                        <span className="text-zinc-800 dark:text-zinc-200 font-bold">{spec.value}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                // Case 2: JSON Map 데이터 (Object 형태: {key: value})
+                                                Object.entries(matchedInfo.specs).map(([key, value]) => (
+                                                    <div key={key} className="flex justify-between items-center text-sm border-b border-dashed border-zinc-200 dark:border-zinc-700/50 pb-1 last:border-0">
+                                                        <span className="text-zinc-500 font-medium capitalize">{key}</span>
+                                                        <span className="text-zinc-800 dark:text-zinc-200 font-bold">{value}</span>
+                                                    </div>
+                                                ))
+                                            )}
                                         </div>
                                     ) : (
-                                        // JSON에 specs가 없을 경우의 Fallback (예시 데이터)
+                                        // Specs 데이터가 없을 때 Fallback
                                         <div className="grid grid-cols-2 gap-y-2 gap-x-4">
                                             <div className="flex justify-between items-center text-sm">
-                                                <span className="text-zinc-500 font-medium">정격 출력</span>
-                                                <span className="text-zinc-800 dark:text-zinc-200 font-bold">150 kW</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-zinc-500 font-medium">유효 양정</span>
-                                                <span className="text-zinc-800 dark:text-zinc-200 font-bold">45 m</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-zinc-500 font-medium">설계 유량</span>
-                                                <span className="text-zinc-800 dark:text-zinc-200 font-bold">320 ㎥/h</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-zinc-500 font-medium">회전수</span>
-                                                <span className="text-zinc-800 dark:text-zinc-200 font-bold">1750 rpm</span>
+                                                <span className="text-zinc-500 font-medium">상세 제원</span>
+                                                <span className="text-zinc-400">등록된 정보 없음</span>
                                             </div>
                                         </div>
                                     )}
@@ -148,7 +146,7 @@ const EquipmentDetailModal = ({ isOpen, onClose, item, matchedInfo }) => {
 
                 {/* 3. 푸터 (높이 고정) */}
                 <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end shrink-0">
-                    <button 
+                    <button
                         onClick={onClose}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm"
                     >
