@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 // src/components/ui/Common.jsx
 import React from 'react';
 import { ChevronRight } from 'lucide-react';

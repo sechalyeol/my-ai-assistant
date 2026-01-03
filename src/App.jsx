@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import SunCalc from 'suncalc';
@@ -25,11 +25,11 @@ import {
 import mapData from './data/mapData.json';
 
 const STRUCTURE_TYPES = [
-  'STAIRS',         // 계단
-  'DOOR',           // 출입문
-  'LADDER',         // 사다리
-  'STEEL_GRATING',  // 그레이팅
-  'FIRE_SHUTTER'    // 방화셔터
+    'STAIRS',         // 계단
+    'DOOR',           // 출입문
+    'LADDER',         // 사다리
+    'STEEL_GRATING',  // 그레이팅
+    'FIRE_SHUTTER'    // 방화셔터
 ];
 
 
@@ -772,6 +772,45 @@ ${contextText.substring(0, 6000)}
                     }
                 }
 
+                else if (action === 'show_schedule') {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + Math.random(),
+                        role: 'ai',
+                        type: 'widget',
+                        widgetType: 'schedule',
+                        data: todos
+                    }]);
+                }
+                else if (action === 'show_finance') {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + Math.random(),
+                        role: 'ai',
+                        type: 'widget',
+                        widgetType: 'finance',
+                        data: finance
+                    }]);
+                }
+                else if (action === 'show_mental') {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + Math.random(),
+                        role: 'ai',
+                        type: 'widget',
+                        widgetType: 'mental',
+                        data: mental
+                    }]);
+                    // 멘탈은 위젯 자체가 정보를 다 보여주므로 텍스트는 생략 가능
+                    replyText = null;
+                }
+                else if (action === 'show_development') {
+                    setMessages(prev => [...prev, {
+                        id: Date.now() + Math.random(),
+                        role: 'ai',
+                        type: 'widget',
+                        widgetType: 'development',
+                        data: dev
+                    }]);
+                }
+
                 // 🌟 [추가] 대시보드 커스텀 위젯을 챗봇에서 조회하는 로직
                 else if (action === 'show_dashboard_widgets') {
                     const filterType = command.widgetType; // 'card' (메모) 또는 'link' (링크)
@@ -992,7 +1031,7 @@ const searchEquipmentForChat = (userQuery, mapData) => {
     // 1. 키워드 추출 (3글자 이상 영문/숫자/하이픈)
     const match = userQuery.match(/[a-zA-Z0-9-]{3,}/);
     if (!match) return null;
-    
+
     const keyword = match[0]; // 예: "Heater", "Pump"
     const allFoundItems = [];
 
@@ -1009,10 +1048,10 @@ const searchEquipmentForChat = (userQuery, mapData) => {
     if (Array.isArray(mapData)) {
         mapData.forEach(building => {
             if (!building.floors) return;
-            
+
             building.floors.forEach(floor => {
                 if (!floor.valves) return;
-                
+
                 // 해당 층에서 검색어와 일치하는 설비 찾기
                 const matches = floor.valves.filter(item => {
                     // (1) 라벨 매칭 확인 (기존 로직)
@@ -1025,8 +1064,8 @@ const searchEquipmentForChat = (userQuery, mapData) => {
                     if (isStructure) {
                         // 구조물이라면, 사용자의 질문(userQuery)에 명시적인 단어가 있는지 확인
                         const query = userQuery.toLowerCase(); // 소문자로 통일해서 비교
-                        
-                        const isExplicitSearch = 
+
+                        const isExplicitSearch =
                             (query.includes('계단') && item.type.includes('STAIRS')) ||
                             (query.includes('문') || query.includes('door')) && (item.type.includes('DOOR') || item.type.includes('SHUTTER')) ||
                             (query.includes('사다리') || query.includes('ladder')) && item.type.includes('LADDER') ||

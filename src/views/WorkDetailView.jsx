@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -1277,12 +1277,46 @@ ${contextText.substring(0, 6000)}
                 <div className="flex-1 flex overflow-hidden">
                     {/* 좌측 탭 메뉴 */}
                     <div className="w-56 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 py-4 flex flex-col gap-1">
-                        <div className="px-3"><div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">현장 업무 (Field)</div><button onClick={() => setEquipTab('FIELD')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'FIELD' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>트러블 슈팅 / 기기 조작</button></div>
-                        <div className="px-3 mt-4"><div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">설비 관리 (System)</div><button onClick={() => setEquipTab('SYSTEM')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activeTab === 'SYSTEM' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>전체 설비 계통도</button><button onClick={() => setEquipTab('MAP')} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors mt-1 flex items-center gap-2 ${activeTab === 'MAP' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
-                            {/* 아이콘 예시 (MapPin 등) 사용 가능 */}
-                            <span>밸브 위치도</span>
-                            {activeTab === 'MAP' && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full ml-auto"></div>}
-                        </button>
+
+                        {/* 1. 현장 업무 (Field) */}
+                        <div className="px-3">
+                            <div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">현장 업무 (Field)</div>
+                            <button
+                                onClick={() => setEquipTab('FIELD')}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors flex items-center justify-between ${activeTab === 'FIELD' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                            >
+                                <span>트러블 슈팅 / 기기 조작</span>
+                                {/* 🌟 [추가됨] 에메랄드 색상 점 */}
+                                {activeTab === 'FIELD' && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>}
+                            </button>
+                        </div>
+
+                        {/* 2. 설비 관리 (System) */}
+                        <div className="px-3 mt-4">
+                            <div className="text-[11px] font-bold text-zinc-400 px-3 mb-2">설비 관리 (System)</div>
+
+                            {/* 전체 설비 계통도 */}
+                            <button
+                                onClick={() => setEquipTab('SYSTEM')}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors flex items-center justify-between ${activeTab === 'SYSTEM' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                            >
+                                <span>전체 설비 계통도</span>
+                                {/* 🌟 [추가됨] 인디고 색상 점 */}
+                                {activeTab === 'SYSTEM' && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>}
+                            </button>
+
+                            {/* 밸브 위치도 */}
+                            <button
+                                onClick={() => setEquipTab('MAP')}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors mt-1 flex items-center justify-between ${activeTab === 'MAP' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold border border-zinc-200 dark:border-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                            >
+                                <span className="flex items-center gap-2">
+                                    {/* 아이콘이 필요하다면 여기에 추가 */}
+                                    밸브 위치도
+                                </span>
+                                {/* 🌟 [유지됨] 인디고 색상 점 */}
+                                {activeTab === 'MAP' && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>}
+                            </button>
                         </div>
                     </div>
 

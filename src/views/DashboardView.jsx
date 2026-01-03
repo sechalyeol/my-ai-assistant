@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 // DashboardView.jsx
 
 import React, { useState, useRef, useEffect, useMemo } from 'react'; // 🌟 useMemo 추가 필수

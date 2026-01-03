@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path' // 이 줄이 필요합니다
@@ -10,5 +10,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'), // @를 src 폴더로 지정
     },
+    
   },
 })

@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 import React from 'react';
 import { X, Wrench, Image as ImageIcon, Activity, Droplets, Gauge, AlertCircle, FileText } from 'lucide-react';
 

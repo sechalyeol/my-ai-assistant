@@ -1,6 +1,7 @@
-﻿// Last Updated: 2026-01-03 23:12:48
+﻿// Last Updated: 2026-01-04 01:12:40
 // [main.cjs] - null 데이터 처리 안전장치 추가 버전
 
+const crypto = require('crypto');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +26,7 @@ let dashboardWindow = null;
 let tray = null;
 let isQuitting = false;
 let currentThemeMode = 'auto';
+let currentUserId = null;
 
 // 프로젝트 루트 경로 설정
 const PROJECT_ROOT = process.cwd();
@@ -40,6 +42,71 @@ const DATA_PATHS = {
     widgets: path.join(PROJECT_ROOT, 'widgets.json'),
     mapData: path.join(PROJECT_ROOT, 'src/data/mapData.json')
 };
+
+const getUserDataPath = (filename) => {
+    if (!currentUserId) return null;
+    // 사용자별 데이터 폴더: data/users/{userId}/{filename}
+    const userDir = path.join(PROJECT_ROOT, 'data', 'users', currentUserId);
+    if (!fs.existsSync(userDir)) {
+        fs.mkdirSync(userDir, { recursive: true });
+    }
+    return path.join(userDir, filename);
+};
+
+const GLOBAL_PATHS = {
+    users: path.join(PROJECT_ROOT, 'data', 'users.json'), // 사용자 목록 관리
+    settings: path.join(PROJECT_ROOT, 'settings.json')    // 공용 설정 (필요시)
+};
+
+// 🌟 [추가] 인증 관련 핸들러 (로그인/회원가입)
+ipcMain.handle('auth-login', async (event, { username, password }) => {
+    const usersData = loadData(GLOBAL_PATHS.users, { users: [] });
+    const user = usersData.users.find(u => u.username === username);
+    
+    // 간단한 해시 비교 (실무에선 bcrypt 권장, 여기선 sha256 예시)
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+
+    if (user && user.password === hash) {
+        currentUserId = user.id;
+        console.log(`✅ 로그인 성공: ${username} (${user.id})`);
+        return { success: true, user: { name: user.name, role: user.role } };
+    }
+    return { success: false, message: "아이디 또는 비밀번호가 잘못되었습니다." };
+});
+
+ipcMain.handle('auth-register', async (event, { username, password, name }) => {
+    const usersData = loadData(GLOBAL_PATHS.users, { users: [] });
+    
+    if (usersData.users.find(u => u.username === username)) {
+        return { success: false, message: "이미 존재하는 아이디입니다." };
+    }
+
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+    const newUser = {
+        id: `user_${Date.now()}`,
+        username,
+        password: hash,
+        name: name || username,
+        role: 'User',
+        joinedAt: new Date().toISOString()
+    };
+
+    usersData.users.push(newUser);
+    saveData(GLOBAL_PATHS.users, usersData);
+    
+    // 새 사용자 폴더 생성
+    const userDir = path.join(PROJECT_ROOT, 'data', 'users', newUser.id);
+    fs.mkdirSync(userDir, { recursive: true });
+
+    return { success: true };
+});
+
+ipcMain.handle('auth-logout', () => {
+    currentUserId = null;
+    console.log("🚪 로그아웃");
+    // 필요하다면 윈도우 크기 초기화 등 수행
+    return true;
+});
 
 // 통합된 데이터 업데이트 알림 함수
 function broadcastUpdate(dataType) {
@@ -223,9 +290,10 @@ ipcMain.on('set-background-color', (event, color) => {
 });
 
 // 데이터 로드/저장 핸들러
-ipcMain.handle('load-schedules', () => loadData(DATA_PATHS.schedules, []));
-ipcMain.on('save-schedules', (event, data) => {
-    saveData(DATA_PATHS.schedules, data, 'schedules');
+ipcMain.handle('load-schedules', () => {
+    const filePath = getUserDataPath('schedules.json');
+    if (!filePath) return []; // 로그인 안됨
+    return loadData(filePath, []);
 });
 
 ipcMain.handle('load-finance', () => loadData(DATA_PATHS.finance, { totalAsset: 0, items: [] }));

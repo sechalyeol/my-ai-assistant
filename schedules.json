@@ -277,5 +277,35 @@
     "done": false,
     "memo": "",
     "category": "personal"
+  },
+  {
+    "id": 1767450399139.1812,
+    "text": "PT",
+    "date": "2026-01-06",
+    "startTime": "17:00",
+    "endTime": "18:00",
+    "done": false,
+    "memo": "",
+    "category": "health"
+  },
+  {
+    "id": 1767450399174.104,
+    "text": "PT",
+    "date": "2026-01-09",
+    "startTime": "12:00",
+    "endTime": "13:00",
+    "done": false,
+    "memo": "",
+    "category": "health"
+  },
+  {
+    "id": 1767450533062.3813,
+    "text": "서울 약속",
+    "date": "2026-01-10",
+    "startTime": "",
+    "endTime": "",
+    "done": false,
+    "memo": "",
+    "category": "personal"
   }
 ]
