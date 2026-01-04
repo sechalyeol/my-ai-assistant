@@ -1,4 +1,4 @@
-﻿// Last Updated: 2026-01-04 04:42:53
+﻿// Last Updated: 2026-01-04 20:42:03
 import React, { useState, useMemo } from 'react';
 import {
     Calendar as CalendarIcon,
@@ -241,12 +241,6 @@ export const EquipmentChatWidget = ({ data }) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <button 
-                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:scale-110 shadow-sm"
-                                            title="지도에서 보기"
-                                        >
-                                            <MapPin size={14} className="fill-current" />
-                                        </button>
                                     </div>
                                 );
                             })
